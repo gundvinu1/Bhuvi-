@@ -1,0 +1,38 @@
+{
+  "name": "bhuvi",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BHUVI – Brain for Human Virtual Intelligence. A modular, local-first Personal AI Operating System.",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter=./apps/* dev",
+    "dev:web": "pnpm --filter=./apps/web dev",
+    "dev:api": "pnpm --filter=./apps/api dev",
+    "dev:worker": "pnpm --filter=./apps/worker dev",
+    "build": "pnpm --filter=./packages/* build && pnpm --filter=./apps/* build",
+    "build:web": "pnpm --filter=./apps/web build",
+    "build:api": "pnpm --filter=./apps/api build",
+    "build:worker": "pnpm --filter=./apps/worker build",
+    "lint": "pnpm --recursive lint",
+    "lint:fix": "pnpm --recursive lint:fix",
+    "typecheck": "pnpm --recursive typecheck",
+    "test": "pnpm --recursive test",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore",
+    "clean": "pnpm --recursive exec -- rm -rf dist build .next .turbo",
+    "prepare": "node -e \"try{require('fs').cpSync('.env.example','.env',{errorOnExist:true})}catch(e){}\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.72.1"
+  }
+}
