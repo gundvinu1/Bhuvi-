@@ -20,7 +20,7 @@ export interface UseAiReturn {
   messages: ChatMessage[];
   isLoading: boolean;
   error: string | null;
-  sendMessage: (prompt: string) => Promise<void>;
+  sendMessage: (message: string) => Promise<void>;
   clearChat: () => void;
   refreshStatus: () => Promise<void>;
 }
@@ -70,16 +70,16 @@ export function useAi(): UseAiReturn {
   }, [fetchStatus]);
 
   const sendMessage = useCallback(
-    async (prompt: string) => {
-      const cleanPrompt = prompt.trim();
-      if (!cleanPrompt || isLoading) return;
+    async (message: string) => {
+      const cleanMessage = message.trim();
+      if (!cleanMessage || isLoading) return;
 
       setError(null);
       const userMessageId = `usr-${Date.now()}`;
       const userMessage: ChatMessage = {
         id: userMessageId,
         role: 'user',
-        content: cleanPrompt,
+        content: cleanMessage,
         timestamp: new Date().toISOString(),
       };
 
@@ -89,7 +89,7 @@ export function useAi(): UseAiReturn {
       try {
         const res = await apiFetch<AiChatResponse>('/ai/chat', {
           method: 'POST',
-          body: JSON.stringify({ message: cleanPrompt }),
+          body: JSON.stringify({ message: cleanMessage }),
         });
 
         const assistantMessage: ChatMessage = {

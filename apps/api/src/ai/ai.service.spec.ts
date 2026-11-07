@@ -92,5 +92,41 @@ describe('AiService', () => {
         { role: 'user', content: 'What is artificial intelligence?' },
       ]);
     });
+
+    it('rejects concurrent chat requests with 429 when concurrency limit is reached', async () => {
+      // Create a deferred promise to simulate a long-running inference
+      let resolveFirstCall: (value: { content: string; model: string; durationMs: number }) => void;
+      const firstCallPromise = new Promise<{ content: string; model: string; durationMs: number }>(
+        (resolve) => {
+          resolveFirstCall = resolve;
+        },
+      );
+
+      mockProvider.chat.mockReturnValueOnce(firstCallPromise);
+
+      // Start first chat request (will remain in flight)
+      const firstRequestPromise = service.chat({ message: 'First prompt' }, 'user-1');
+
+      // Attempt second chat request concurrently while first is still in-flight
+      await expect(service.chat({ message: 'Second prompt' }, 'user-2')).rejects.toThrow(
+        'The local AI engine is currently busy processing another request',
+      );
+
+      // Complete first call and verify slot is freed
+      resolveFirstCall!({ content: 'Done first', model: 'qwen2.5:3b', durationMs: 100 });
+      await firstRequestPromise;
+
+      expect(service.getActiveInferences()).toBe(0);
+    });
+
+    it('frees active inference counter even when OllamaProvider throws an exception', async () => {
+      mockProvider.chat.mockRejectedValueOnce(new Error('Network failure'));
+
+      await expect(service.chat({ message: 'Fail prompt' }, 'user-1')).rejects.toThrow(
+        'Network failure',
+      );
+
+      expect(service.getActiveInferences()).toBe(0);
+    });
   });
 });

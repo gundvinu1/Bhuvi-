@@ -1,7 +1,7 @@
 # BHUVI – Development Status
 
 **Last Updated:** 2026-11-07  
-**Current Phase:** Module 05 – AI Brain & Model Integration (COMPLETE)
+**Current Phase:** Module 05 – AI Brain & Model Integration (COMPLETE & AUDITED)
 
 ---
 
@@ -19,54 +19,58 @@
 
 ## Module Status
 
-| #   | Module                                 | Status          | Notes                                                                                                                                |
-| --- | -------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| 01  | Project Foundation & Environment Setup | ✅ **COMPLETE** | Monorepo, NestJS API, Next.js Web, Worker, Shared library                                                                            |
-| 02  | Authentication & User Management       | ✅ **COMPLETE** | Register, Login, JWT auth, Protected `/auth/me`, Auth UI, Security guards                                                            |
-| 03  | Database & Infrastructure              | ✅ **COMPLETE** | PostgreSQL 16, Prisma ORM, BullMQ, Redis 7, PrismaUsersRepository, Worker queue integration                                          |
-| 04  | Application Dashboard                  | ✅ **COMPLETE** | Overview & Settings dashboards, responsive sidebar & mobile drawer, HttpOnly auth integration, backend health telemetry, 0 fake data |
-| 05  | AI Brain & Model Integration           | ✅ **COMPLETE** | Local Ollama integration (`127.0.0.1:11434`), `qwen2.5:3b` model, live chat API & UI, rate limiting, zero paid cloud APIs            |
-| 06  | AI Agent Orchestrator                  | 📋 Planned      | Awaiting Module 05 review & approval                                                                                                 |
-| 07  | Message Intelligence Engine            | 📋 Planned      | Awaiting Module 06                                                                                                                   |
-| 08  | Personal Memory & Knowledge            | 📋 Planned      | Awaiting Modules 05, 03                                                                                                              |
-| 09  | Gmail Integration                      | 📋 Planned      | Awaiting Module 07                                                                                                                   |
-| 10  | WhatsApp Integration                   | 📋 Planned      | Awaiting Module 07                                                                                                                   |
-| 11  | Social Media Integrations              | 📋 Planned      | Awaiting Module 07                                                                                                                   |
-| 12  | Calendar & Task Management             | 📋 Planned      | Awaiting Module 03                                                                                                                   |
-| 13  | Morning Intelligence System            | 📋 Planned      | Awaiting Modules 07, 08, 12                                                                                                          |
-| 14  | Natural Language Command Center        | 📋 Planned      | Awaiting Module 06                                                                                                                   |
-| 15  | Action & Automation Engine             | 📋 Planned      | Awaiting Module 14                                                                                                                   |
-| 16  | Voice Assistant                        | 📋 Planned      | Awaiting Module 14                                                                                                                   |
-| 17  | Mobile Application & Remote Access     | 📋 Planned      | Awaiting Module 04                                                                                                                   |
-| 18  | Security, Monitoring & Deployment      | 📋 Planned      | Awaiting all modules                                                                                                                 |
+| #   | Module                                 | Status          | Notes                                                                                                                                                                 |
+| --- | -------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 01  | Project Foundation & Environment Setup | ✅ **COMPLETE** | Monorepo, NestJS API, Next.js Web, Worker, Shared library                                                                                                             |
+| 02  | Authentication & User Management       | ✅ **COMPLETE** | Register, Login, JWT auth, Protected `/auth/me`, Auth UI, Security guards                                                                                             |
+| 03  | Database & Infrastructure              | ✅ **COMPLETE** | PostgreSQL 16, Prisma ORM, BullMQ, Redis 7, PrismaUsersRepository, Worker queue integration                                                                           |
+| 04  | Application Dashboard                  | ✅ **COMPLETE** | Overview & Settings dashboards, responsive sidebar & mobile drawer, HttpOnly auth integration, backend health telemetry, 0 fake data                                  |
+| 05  | AI Brain & Model Integration           | ✅ **COMPLETE** | Local Ollama integration (`127.0.0.1:11434`), `qwen2.5:3b` model, standardized `{ "message": "..." }` contract, concurrency protection (429), zero paid APIs, audited |
+| 06  | AI Agent Orchestrator                  | 📋 Planned      | Awaiting Module 05 review & approval                                                                                                                                  |
+| 07  | Message Intelligence Engine            | 📋 Planned      | Awaiting Module 06                                                                                                                                                    |
+| 08  | Personal Memory & Knowledge            | 📋 Planned      | Awaiting Modules 05, 03                                                                                                                                               |
+| 09  | Gmail Integration                      | 📋 Planned      | Awaiting Module 07                                                                                                                                                    |
+| 10  | WhatsApp Integration                   | 📋 Planned      | Awaiting Module 07                                                                                                                                                    |
+| 11  | Social Media Integrations              | 📋 Planned      | Awaiting Module 07                                                                                                                                                    |
+| 12  | Calendar & Task Management             | 📋 Planned      | Awaiting Module 03                                                                                                                                                    |
+| 13  | Morning Intelligence System            | 📋 Planned      | Awaiting Modules 07, 08, 12                                                                                                                                           |
+| 14  | Natural Language Command Center        | 📋 Planned      | Awaiting Module 06                                                                                                                                                    |
+| 15  | Action & Automation Engine             | 📋 Planned      | Awaiting Module 14                                                                                                                                                    |
+| 16  | Voice Assistant                        | 📋 Planned      | Awaiting Module 14                                                                                                                                                    |
+| 17  | Mobile Application & Remote Access     | 📋 Planned      | Awaiting Module 04                                                                                                                                                    |
+| 18  | Security, Monitoring & Deployment      | 📋 Planned      | Awaiting all modules                                                                                                                                                  |
 
 ---
 
-## Module 05 – Acceptance Criteria
+## Module 05 – Acceptance & Audit Criteria
 
 ### ✅ All Criteria Met
 
-| Criterion                                | Status | Evidence                                                                                                    |
-| ---------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
-| Ollama detection & reachability verified | ✅     | Ollama CLI 0.40.3 located at `~\AppData\Local\Programs\Ollama\ollama.exe`, daemon active on port 11434      |
-| Recommended model pulled & verified      | ✅     | `qwen2.5:3b` (1.9 GB) installed and verified with direct prompt inference; `llama3.2:3b` (2.0 GB) available |
-| Shared AI types created                  | ✅     | `packages/shared/src/types/ai.types.ts` compiled into `@bhuvi/shared`                                       |
-| NestJS AI module created                 | ✅     | `apps/api/src/ai/` (`AiModule`, `AiController`, `AiService`, `OllamaProvider`, `ChatDto`, `ai.config.ts`)   |
-| `GET /api/v1/ai/status` implemented      | ✅     | Probes Ollama reachability, active model, model availability, and ping duration                             |
-| `GET /api/v1/ai/models` implemented      | ✅     | Lists installed models with sizes, digest, and details                                                      |
-| `POST /api/v1/ai/chat` implemented       | ✅     | Protected by `JwtAuthGuard`, rate-limited to 20 req/min, input validation (4,000 char max, non-empty)       |
-| BHUVI system prompt injected             | ✅     | Clear identity, local privacy emphasis, honest boundary enforcement, untrusted input protection             |
-| Dashboard Assistant Panel connected      | ✅     | `apps/web/components/dashboard/assistant-panel.tsx` with live message stream, telemetry, Enter-to-send      |
-| Live Ollama status badge displayed       | ✅     | Status badge shows `Connected (qwen2.5:3b)`, `Model Missing`, or `Offline` with live backend sync           |
-| Error & loading states handled           | ✅     | Animated thinking indicator, error alert banners, retry capability, disabled inputs during request          |
-| Real hardware inference verified         | ✅     | Verified live against `qwen2.5:3b` (~93ms eval speed, ~1.2s total roundtrip)                                |
-| Monorepo tests passing                   | ✅     | `pnpm test` (24 suites, 120 tests passed across monorepo)                                                   |
-| Monorepo formatting & lint clean         | ✅     | `pnpm format:check` and `pnpm lint` passed with 0 errors                                                    |
-| Production build passing                 | ✅     | `pnpm build` passed across all packages and applications                                                    |
+| Criterion                                           | Status | Evidence                                                                                                                |
+| --------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Standardized API contract to `{ "message": "..." }` | ✅     | `ChatDto`, `AiChatRequest`, `AiService`, `use-ai.ts`, `AssistantPanel`, and all test suites                             |
+| Ollama detection & reachability verified            | ✅     | Ollama CLI 0.40.3 located at `~\AppData\Local\Programs\Ollama\ollama.exe`, daemon active on port 11434                  |
+| Recommended model pulled & verified                 | ✅     | `qwen2.5:3b` (1.9 GB) installed and verified with direct prompt inference; `llama3.2:3b` (2.0 GB) available             |
+| Shared AI types created                             | ✅     | `packages/shared/src/types/ai.types.ts` compiled into `@bhuvi/shared`                                                   |
+| NestJS AI module created                            | ✅     | `apps/api/src/ai/` (`AiModule`, `AiController`, `AiService`, `OllamaProvider`, `ChatDto`, `ai.config.ts`)               |
+| `GET /api/v1/ai/status` implemented & audited       | ✅     | Probes Ollama reachability, active model, model availability. Zero secrets or file paths exposed                        |
+| `GET /api/v1/ai/models` implemented & audited       | ✅     | Lists installed models with sizes, digest, and details. Zero secrets or file paths exposed                              |
+| `POST /api/v1/ai/chat` protected & throttled        | ✅     | Protected by `JwtAuthGuard` (Cookie + Bearer), rate-limited to 20 req/min, input validation (4,000 char max, non-empty) |
+| In-flight concurrency limiter implemented           | ✅     | `AiService` enforces max 1 in-flight inference; overlapping calls receive HTTP 429 to protect local GPU/CPU             |
+| BHUVI system prompt injected                        | ✅     | Clear identity, local privacy emphasis, honest boundary enforcement, untrusted input protection                         |
+| Dashboard Assistant Panel connected                 | ✅     | `apps/web/components/dashboard/assistant-panel.tsx` with live message stream, telemetry, Enter-to-send                  |
+| Live Ollama status badge displayed                  | ✅     | Status badge shows `Connected (qwen2.5:3b)`, `Model Missing`, or `Offline` with live backend sync                       |
+| Error & loading states handled                      | ✅     | Animated thinking indicator, error alert banners, retry capability, disabled inputs during request                      |
+| Local network boundary verified                     | ✅     | `Get-NetTCPConnection` confirms Ollama binds strictly to `127.0.0.1:11434` (no public exposure)                         |
+| Zero external AI SDKs                               | ✅     | Scanned package manifests for cloud AI libraries: 0 external SDKs found                                                 |
+| AI Security & guardrails verified                   | ✅     | `ai-security.spec.ts` verifies code boundaries (no exec/spawn/eval), secret protection, command refusals                |
+| Monorepo tests passing                              | ✅     | `pnpm test` (25 suites, 130 tests passed across monorepo)                                                               |
+| Monorepo formatting & lint clean                    | ✅     | `pnpm format:check` and `pnpm lint` passed with 0 errors                                                                |
+| Production build passing                            | ✅     | `pnpm build` passed across all packages and applications                                                                |
 
 ---
 
-## Verification Results (Module 05)
+## Verification Results (Module 05 Audit)
 
 ```
 1. Format Check:
@@ -79,8 +83,8 @@ pnpm typecheck     → PASS (6/6 projects, 0 errors)
 pnpm lint          → PASS (0 errors, 0 warnings across all workspaces)
 
 4. Automated Tests:
-pnpm test          → PASS (24 suites, 120 tests passed across monorepo)
-  - apps/api: 16 suites, 92 passed
+pnpm test          → PASS (25 suites, 130 tests passed across monorepo)
+  - apps/api: 17 suites, 102 passed
     • health.controller.spec.ts (3 passed)
     • users.service.spec.ts (4 passed)
     • prisma-users.repository.spec.ts (6 passed)
@@ -94,9 +98,10 @@ pnpm test          → PASS (24 suites, 120 tests passed across monorepo)
     • auth-cookie-integration.spec.ts (6 passed)
     • real-infrastructure.spec.ts (9 passed against live PostgreSQL 16 & Redis 7)
     • ollama.provider.spec.ts (6 passed)
-    • ai.service.spec.ts (4 passed)
+    • ai.service.spec.ts (6 passed, including concurrency limit 429 and error cleanup)
     • ai.controller.spec.ts (6 passed)
-    • real-ai-inference.spec.ts (5 passed against live Ollama qwen2.5:3b)
+    • real-ai-inference.spec.ts (7 passed against live Ollama qwen2.5:3b)
+    • ai-security.spec.ts (6 passed against live Ollama & code boundaries)
   - apps/web: 7 suites, 23 passed
     • page.spec.tsx (1 passed)
     • login.spec.tsx (2 passed)
@@ -108,10 +113,7 @@ pnpm test          → PASS (24 suites, 120 tests passed across monorepo)
   - apps/worker: 1 suite, 5 passed
     • main.spec.ts (5 passed)
 
-5. Real AI Inference Verification:
-pnpm test:ai       → PASS (Live inference test against qwen2.5:3b, latency ~1,200 ms, status check, model listing, empty prompt validation, auth rejection)
-
-6. Production Build:
+5. Production Build:
 pnpm build         → PASS (@bhuvi/shared, @bhuvi/database, @bhuvi/queue, @bhuvi/api, @bhuvi/worker, @bhuvi/web)
   Routes generated:
   ○ /
@@ -126,4 +128,4 @@ pnpm build         → PASS (@bhuvi/shared, @bhuvi/database, @bhuvi/queue, @bhuv
 
 ## Next Steps
 
-> 🛑 **Module 05 is complete. Awaiting user review and explicit approval before starting Module 06 (AI Agent Orchestrator).**
+> 🛑 **Module 05 audit is complete. Awaiting user review and explicit approval before starting Module 06 (AI Agent Orchestrator).**

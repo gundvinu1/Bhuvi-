@@ -11,7 +11,7 @@ const SUGGESTIONS = [
 ];
 
 export function AssistantPanel() {
-  const [prompt, setPrompt] = useState('');
+  const [message, setMessage] = useState('');
   const {
     status,
     isStatusLoading,
@@ -24,16 +24,16 @@ export function AssistantPanel() {
   } = useAi();
 
   const handleSelectSuggestion = async (suggestion: string) => {
-    setPrompt('');
+    setMessage('');
     await sendMessage(suggestion);
   };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanPrompt = prompt.trim();
-    if (!cleanPrompt || isLoading) return;
-    setPrompt('');
-    await sendMessage(cleanPrompt);
+    const cleanMessage = message.trim();
+    if (!cleanMessage || isLoading) return;
+    setMessage('');
+    await sendMessage(cleanMessage);
   };
 
   const getStatusBadge = () => {
@@ -186,8 +186,8 @@ export function AssistantPanel() {
         <div className="relative flex items-center">
           <input
             type="text"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
             disabled={isLoading}
             placeholder={
               status?.status === 'unavailable'
@@ -198,10 +198,10 @@ export function AssistantPanel() {
           />
           <button
             type="submit"
-            disabled={!prompt.trim() || isLoading || status?.status === 'unavailable'}
+            disabled={!message.trim() || isLoading || status?.status === 'unavailable'}
             className="absolute right-2 p-2 rounded-xl bhuvi-gradient text-white hover:opacity-95 transition disabled:opacity-40 disabled:cursor-not-allowed shadow"
-            title="Send prompt to BHUVI"
-            aria-label="Send prompt to BHUVI"
+            title="Send message to BHUVI"
+            aria-label="Send message to BHUVI"
           >
             <PaperAirplaneIcon className="w-4 h-4" />
           </button>

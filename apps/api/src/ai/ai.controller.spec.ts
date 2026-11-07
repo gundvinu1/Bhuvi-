@@ -108,18 +108,18 @@ describe('AiController', () => {
       data: '',
     };
 
-    it('accepts valid prompt messages', async () => {
+    it('accepts valid messages', async () => {
       const validDto = { message: 'Explain gravity.' };
       const result = await target.transform(validDto, metadata);
       expect(result).toEqual(validDto);
     });
 
-    it('rejects empty prompt messages', async () => {
+    it('rejects empty messages', async () => {
       const invalidDto = { message: '' };
       await expect(target.transform(invalidDto, metadata)).rejects.toThrow(BadRequestException);
     });
 
-    it('rejects oversized prompt messages exceeding 4000 characters', async () => {
+    it('rejects oversized messages exceeding 4000 characters', async () => {
       const oversizedDto = { message: 'a'.repeat(4001) };
       await expect(target.transform(oversizedDto, metadata)).rejects.toThrow(BadRequestException);
     });

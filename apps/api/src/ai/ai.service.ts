@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { AiStatusResponse, AiModelInfo, AiChatResponse } from '@bhuvi/shared';
 import { OllamaProvider } from './ollama.provider';
 import { ChatDto } from './dto/chat.dto';
@@ -18,8 +18,15 @@ Your core principles:
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
+  private activeInferences = 0;
+  // Maximum concurrent in-flight inference requests allowed simultaneously on local GPU/CPU hardware
+  private readonly maxConcurrentInferences = 1;
 
   constructor(private readonly ollamaProvider: OllamaProvider) {}
+
+  getActiveInferences(): number {
+    return this.activeInferences;
+  }
 
   /**
    * Evaluates the current operational status of the Ollama LLM provider.
@@ -62,30 +69,48 @@ export class AiService {
   }
 
   /**
-   * Processes a natural language prompt with the configured local model.
+   * Processes a natural language message with the configured local model.
+   * Guarded by in-flight concurrency limiter to protect local hardware.
    */
   async chat(dto: ChatDto, userId: string): Promise<AiChatResponse> {
-    const prompt = dto.message.trim();
-    this.logger.log(`Processing AI chat request for user [${userId}] (${prompt.length} chars)`);
+    if (this.activeInferences >= this.maxConcurrentInferences) {
+      this.logger.warn(
+        `Rejected concurrent AI chat request for user [${userId}] — engine currently busy (${this.activeInferences}/${this.maxConcurrentInferences})`,
+      );
+      throw new HttpException(
+        'The local AI engine is currently busy processing another request. Please wait for it to complete.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
-    const messages: OllamaChatMessage[] = [
-      {
-        role: 'system',
-        content: BHUVI_SYSTEM_PROMPT,
-      },
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ];
+    this.activeInferences++;
+    try {
+      const userMessage = dto.message.trim();
+      this.logger.log(
+        `Processing AI chat request for user [${userId}] (${userMessage.length} chars)`,
+      );
 
-    const result = await this.ollamaProvider.chat(messages);
+      const messages: OllamaChatMessage[] = [
+        {
+          role: 'system',
+          content: BHUVI_SYSTEM_PROMPT,
+        },
+        {
+          role: 'user',
+          content: userMessage,
+        },
+      ];
 
-    return {
-      response: result.content,
-      model: result.model,
-      provider: 'ollama',
-      durationMs: result.durationMs,
-    };
+      const result = await this.ollamaProvider.chat(messages);
+
+      return {
+        response: result.content,
+        model: result.model,
+        provider: 'ollama',
+        durationMs: result.durationMs,
+      };
+    } finally {
+      this.activeInferences--;
+    }
   }
 }

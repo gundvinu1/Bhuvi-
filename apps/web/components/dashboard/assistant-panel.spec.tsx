@@ -91,7 +91,7 @@ describe('AssistantPanel Component', () => {
     const input = screen.getByPlaceholderText(/Ask BHUVI anything/i);
     fireEvent.change(input, { target: { value: 'Explain quantum physics' } });
 
-    const submitBtn = screen.getByRole('button', { name: /Send prompt to BHUVI/i });
+    const submitBtn = screen.getByRole('button', { name: /Send message to BHUVI/i });
     fireEvent.click(submitBtn);
 
     expect(mockSendMessage).toHaveBeenCalledWith('Explain quantum physics');

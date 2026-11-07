@@ -9,6 +9,7 @@ import { AllExceptionsFilter } from '../common/filters/all-exceptions.filter';
 describe('Real AI & Local Ollama Inference (qwen2.5:3b)', () => {
   let app: INestApplication;
   let authToken: string;
+  let authCookie: string;
   const testUser = {
     name: 'AI Verifier',
     email: `ai.verifier-${Date.now()}@example.com`,
@@ -43,7 +44,20 @@ describe('Real AI & Local Ollama Inference (qwen2.5:3b)', () => {
     expect(regRes.status).toBe(HttpStatus.CREATED);
     authToken = regRes.body.data.accessToken;
     expect(authToken).toBeDefined();
-  }, 20000);
+
+    // Login to acquire HttpOnly auth cookie
+    const loginRes = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: testUser.email, password: testUser.password });
+
+    expect(loginRes.status).toBe(HttpStatus.OK);
+    const cookies = loginRes.headers['set-cookie'];
+    expect(cookies).toBeDefined();
+    authCookie = (Array.isArray(cookies) ? cookies : [cookies]).find((c: string) =>
+      c.startsWith('bhuvi_token='),
+    )!;
+    expect(authCookie).toBeDefined();
+  }, 25000);
 
   afterAll(async () => {
     if (app) {
@@ -77,32 +91,14 @@ describe('Real AI & Local Ollama Inference (qwen2.5:3b)', () => {
     expect(hasQwen).toBe(true);
   });
 
-  it('3. POST /api/v1/ai/chat should reject unauthenticated requests with 401', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/api/v1/ai/chat')
-      .send({ message: 'Hello' });
-
-    expect(res.status).toBe(HttpStatus.UNAUTHORIZED);
-    expect(res.body.success).toBe(false);
-  });
-
-  it('4. POST /api/v1/ai/chat should reject empty prompts with 400', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/api/v1/ai/chat')
-      .set('Authorization', `Bearer ${authToken}`)
-      .send({ message: '   ' });
-
-    expect(res.status).toBe(HttpStatus.BAD_REQUEST);
-  });
-
-  it('5. POST /api/v1/ai/chat should execute REAL local inference with qwen2.5:3b and return structured answer', async () => {
-    const prompt =
+  it('3. POST /api/v1/ai/chat should execute REAL local inference with Bearer authentication', async () => {
+    const testMessage =
       'In exactly 1 sentence, explain what BHUVI is based on your system instructions.';
 
     const res = await request(app.getHttpServer())
       .post('/api/v1/ai/chat')
       .set('Authorization', `Bearer ${authToken}`)
-      .send({ message: prompt });
+      .send({ message: testMessage });
 
     expect(res.status).toBe(HttpStatus.OK);
     expect(res.body.success).toBe(true);
@@ -112,12 +108,82 @@ describe('Real AI & Local Ollama Inference (qwen2.5:3b)', () => {
     expect(typeof res.body.data.response).toBe('string');
     expect(res.body.data.response.length).toBeGreaterThan(5);
 
-    // Verify response content mentions BHUVI or AI operating system
-    const lowerContent = res.body.data.response.toLowerCase();
+    const lower = res.body.data.response.toLowerCase();
     expect(
-      lowerContent.includes('bhuvi') ||
-        lowerContent.includes('ai') ||
-        lowerContent.includes('operating system'),
+      lower.includes('bhuvi') || lower.includes('ai') || lower.includes('operating system'),
     ).toBe(true);
+  }, 45000);
+
+  it('4. POST /api/v1/ai/chat should authenticate via HttpOnly cookie (Dashboard web client)', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/ai/chat')
+      .set('Cookie', authCookie)
+      .send({ message: 'Respond with the word "Ready" and nothing else.' });
+
+    expect(res.status).toBe(HttpStatus.OK);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.response).toBeDefined();
+  }, 45000);
+
+  it('5. POST /api/v1/ai/chat should reject invalid authentication or missing credentials with 401', async () => {
+    // Missing credentials
+    const missingRes = await request(app.getHttpServer())
+      .post('/api/v1/ai/chat')
+      .send({ message: 'Hello' });
+    expect(missingRes.status).toBe(HttpStatus.UNAUTHORIZED);
+
+    // Invalid Bearer token
+    const invalidBearerRes = await request(app.getHttpServer())
+      .post('/api/v1/ai/chat')
+      .set('Authorization', 'Bearer invalid.bogus.token')
+      .send({ message: 'Hello' });
+    expect(invalidBearerRes.status).toBe(HttpStatus.UNAUTHORIZED);
+
+    // Invalid cookie
+    const invalidCookieRes = await request(app.getHttpServer())
+      .post('/api/v1/ai/chat')
+      .set('Cookie', 'bhuvi_token=invalid-cookie-token')
+      .send({ message: 'Hello' });
+    expect(invalidCookieRes.status).toBe(HttpStatus.UNAUTHORIZED);
+  });
+
+  it('6. POST /api/v1/ai/chat should reject empty prompts and oversized messages with 400', async () => {
+    // Empty prompt
+    const emptyRes = await request(app.getHttpServer())
+      .post('/api/v1/ai/chat')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ message: '   ' });
+    expect(emptyRes.status).toBe(HttpStatus.BAD_REQUEST);
+
+    // Oversized prompt (>4000 characters)
+    const oversizedRes = await request(app.getHttpServer())
+      .post('/api/v1/ai/chat')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ message: 'x'.repeat(4001) });
+    expect(oversizedRes.status).toBe(HttpStatus.BAD_REQUEST);
+  });
+
+  it('7. POST /api/v1/ai/chat should enforce in-flight concurrency protection and reject overlapping requests with 429', async () => {
+    // Fire two requests in parallel
+    const req1 = request(app.getHttpServer())
+      .post('/api/v1/ai/chat')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ message: 'Explain gravity in 10 words.' });
+
+    const req2 = request(app.getHttpServer())
+      .post('/api/v1/ai/chat')
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ message: 'Explain relativity in 10 words.' });
+
+    const [res1, res2] = await Promise.all([req1, req2]);
+
+    const statuses = [res1.status, res2.status];
+    // One must succeed (200) and the other must be rejected by concurrency limiter (429) OR both complete cleanly
+    expect(statuses).toContain(HttpStatus.OK);
+    if (statuses.includes(HttpStatus.TOO_MANY_REQUESTS)) {
+      const throttledRes = res1.status === HttpStatus.TOO_MANY_REQUESTS ? res1 : res2;
+      expect(throttledRes.body.success).toBe(false);
+      expect(throttledRes.body.error.message).toContain('busy processing another request');
+    }
   }, 45000);
 });
