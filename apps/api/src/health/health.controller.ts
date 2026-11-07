@@ -8,12 +8,11 @@ export class HealthController {
 
   /**
    * GET /api/v1/health
-   * Returns real runtime status. Does NOT claim database/Redis/Ollama
-   * are healthy – those integrations are not yet implemented.
+   * Returns real runtime application status along with actual PostgreSQL
+   * and Redis connectivity states without exposing internal secrets.
    */
   @Get()
-  getHealth(): HealthCheckResponse {
+  async getHealth(): Promise<HealthCheckResponse> {
     return this.healthService.getHealth();
   }
 }
-

@@ -1,30 +1,35 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { PrismaModule } from '@bhuvi/database';
 import { UsersService } from './users.service';
 import { InMemoryUsersRepository, USERS_REPOSITORY } from './users.repository';
+import { PrismaUsersRepository } from './prisma-users.repository';
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, PrismaModule],
   providers: [
     UsersService,
+    PrismaUsersRepository,
+    InMemoryUsersRepository,
     {
       provide: USERS_REPOSITORY,
-      useFactory: (configService: ConfigService) => {
+      useFactory: (configService: ConfigService, prismaRepo: PrismaUsersRepository) => {
         const isProd = (process.env['NODE_ENV'] ?? 'development') === 'production';
-        const authDevMode = configService.get<boolean>('auth.authDevMode') ?? !isProd;
+        const rawDevMode = configService.get<string>('AUTH_DEV_MODE') ?? process.env['AUTH_DEV_MODE'];
+        const configDevMode = configService.get<boolean>('auth.authDevMode');
+        const authDevMode = !isProd && (configDevMode !== undefined ? configDevMode : rawDevMode !== 'false');
 
+        // In production or when AUTH_DEV_MODE=false, persistent PostgreSQL storage is required
         if (isProd || !authDevMode) {
-          throw new Error(
-            'SECURITY VIOLATION: InMemoryUsersRepository cannot be used in production mode or when AUTH_DEV_MODE=false! ' +
-              'A persistent PostgreSQL database via Prisma is required (scheduled for Module 03).',
-          );
+          return prismaRepo;
         }
 
+        // Test/isolated development adapter when explicitly active in non-production
         return new InMemoryUsersRepository();
       },
-      inject: [ConfigService],
+      inject: [ConfigService, PrismaUsersRepository],
     },
   ],
-  exports: [UsersService, USERS_REPOSITORY],
+  exports: [UsersService, USERS_REPOSITORY, PrismaUsersRepository],
 })
 export class UsersModule {}

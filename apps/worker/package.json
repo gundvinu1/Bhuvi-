@@ -13,6 +13,8 @@
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
+    "@bhuvi/database": "workspace:*",
+    "@bhuvi/queue": "workspace:*",
     "@bhuvi/shared": "workspace:*"
   },
   "devDependencies": {

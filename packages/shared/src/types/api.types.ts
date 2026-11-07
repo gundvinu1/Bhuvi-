@@ -41,6 +41,10 @@ export interface HealthCheckResponse {
   version: string;
   timestamp: string;
   uptime?: number;
+  dependencies?: {
+    postgres: 'connected' | 'disconnected' | 'disabled';
+    redis: 'connected' | 'disconnected' | 'disabled';
+  };
 }
 
 /** Pagination parameters */
