@@ -13,6 +13,13 @@ export enum BhuviErrorCode {
   FORBIDDEN = 'FORBIDDEN',
   INTERNAL = 'INTERNAL_ERROR',
 
+  // Authentication & Authorization (Module 02)
+  INVALID_CREDENTIALS = 'INVALID_CREDENTIALS',
+  USER_ALREADY_EXISTS = 'USER_ALREADY_EXISTS',
+  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
+  TOKEN_INVALID = 'TOKEN_INVALID',
+  TOKEN_MISSING = 'TOKEN_MISSING',
+
   // Configuration
   MISSING_CONFIG = 'MISSING_CONFIG',
   INVALID_CONFIG = 'INVALID_CONFIG',
@@ -54,6 +61,14 @@ export class ValidationError extends BhuviError {
   constructor(message: string, details?: unknown) {
     super(BhuviErrorCode.VALIDATION_FAILED, message, details);
     this.name = 'ValidationError';
+  }
+}
+
+/** Authentication error */
+export class AuthenticationError extends BhuviError {
+  constructor(message: string, code: BhuviErrorCode = BhuviErrorCode.UNAUTHORIZED, details?: unknown) {
+    super(code, message, details);
+    this.name = 'AuthenticationError';
   }
 }
 

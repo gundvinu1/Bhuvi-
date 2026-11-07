@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { APP_FULL_NAME, APP_NAME, APP_VERSION } from '@bhuvi/shared';
 
 export default function HomePage() {
@@ -42,6 +43,22 @@ export default function HomePage() {
             Status:{' '}
             <span className="text-emerald-400 font-semibold">Foundation initialized.</span>
           </span>
+        </div>
+
+        {/* Authentication Navigation */}
+        <div className="flex items-center justify-center gap-4 pt-1">
+          <Link
+            href="/login"
+            className="px-5 py-2.5 rounded-xl bhuvi-gradient hover:opacity-95 text-white font-semibold text-sm shadow-lg shadow-bhuvi-600/30 transition"
+          >
+            Sign In
+          </Link>
+          <Link
+            href="/register"
+            className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 font-semibold text-sm transition"
+          >
+            Create Account
+          </Link>
         </div>
 
         {/* Module roadmap preview */}

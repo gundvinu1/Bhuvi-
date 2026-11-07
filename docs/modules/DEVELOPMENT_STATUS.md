@@ -1,7 +1,7 @@
 # BHUVI – Development Status
 
-**Last Updated:** 2026-11-06
-**Current Phase:** Module 01 – Project Foundation
+**Last Updated:** 2026-11-07
+**Current Phase:** Module 02 – Authentication & User Management (COMPLETE)
 
 ---
 
@@ -21,10 +21,10 @@
 
 | # | Module | Status | Notes |
 |---|--------|--------|-------|
-| 01 | Project Foundation & Environment Setup | ✅ **COMPLETE** | All acceptance criteria and tests passing |
-| 02 | Authentication & User Management | 📋 Planned | Awaiting explicit approval to start |
-| 03 | Database & Infrastructure | 📋 Planned | Awaiting Module 02 |
-| 04 | Application Dashboard | 📋 Planned | Awaiting Modules 02, 03 |
+| 01 | Project Foundation & Environment Setup | ✅ **COMPLETE** | Monorepo, NestJS API, Next.js Web, Worker, Shared library |
+| 02 | Authentication & User Management | ✅ **COMPLETE** | Register, Login, JWT auth, Protected `/auth/me`, Auth UI, Security guards |
+| 03 | Database & Infrastructure | 📋 Planned | PostgreSQL, Prisma, Redis, BullMQ (Awaiting approval to start) |
+| 04 | Application Dashboard | 📋 Planned | Awaiting Module 03 |
 | 05 | AI Brain & Model Integration | 📋 Planned | Awaiting Module 03 |
 | 06 | AI Agent Orchestrator | 📋 Planned | Awaiting Module 05 |
 | 07 | Message Intelligence Engine | 📋 Planned | Awaiting Module 06 |
@@ -42,39 +42,34 @@
 
 ---
 
-## Module 01 – Acceptance Criteria
+## Module 02 – Acceptance Criteria
 
 ### ✅ All Criteria Met
 
 | Criterion | Status | Evidence |
 |-----------|--------|---------|
-| pnpm workspaces configured | ✅ | `pnpm-workspace.yaml` |
-| Root `package.json` with dev/build/lint/typecheck/test scripts | ✅ | Unified monorepo scripts |
-| Shared TypeScript strict config | ✅ | `tsconfig.base.json` with all strict flags |
-| ESLint configured | ✅ | `eslint.config.mjs` flat config with `@typescript-eslint` v8 |
-| Prettier configured | ✅ | `.prettierrc` |
-| `.gitignore` created | ✅ | Ignores `.env`, `node_modules`, build outputs |
-| `.env.example` with required vars | ✅ | NODE_ENV, WEB_PORT, API_PORT, DATABASE_URL, REDIS_URL, OLLAMA_BASE_URL, SESSION_SECRET |
-| Next.js app created | ✅ | `apps/web` with App Router & Tailwind CSS |
-| Landing page with BHUVI branding | ✅ | Displays name, tagline, and foundation status badge |
-| Mobile-responsive layout | ✅ | Responsive Tailwind CSS container and typography |
-| NestJS API created | ✅ | `apps/api` with modular structure |
-| Global prefix `/api/v1` | ✅ | Set in `apps/api/src/main.ts` |
-| `GET /api/v1/health` endpoint | ✅ | Returns application, status, version, timestamp, uptime |
-| Centralized exception handling | ✅ | `AllExceptionsFilter` |
-| Request validation | ✅ | Global `ValidationPipe` |
-| Worker application created | ✅ | `apps/worker` with structured logging & graceful shutdown |
-| `@bhuvi/shared` package | ✅ | Types, constants, error classes, utility functions |
-| Future infrastructure placeholder | ✅ | No PostgreSQL, Redis, or Ollama implemented |
-| No authentication implemented | ✅ | Future scope strictly preserved for Module 02 |
-| Architecture and module documentation | ✅ | `ARCHITECTURE.md`, `TECH_STACK.md`, `DEVELOPMENT_CONVENTIONS.md`, `MODULES.md` |
-| Windows 11 compatibility | ✅ | Validated in PowerShell on Windows without WSL/Docker dependencies |
-| Automated tests | ✅ | Jest test suites passing across api, worker, and web |
-| Typecheck & lint | ✅ | Clean zero-error verification across all workspaces |
+| Authentication module implemented | ✅ | `apps/api/src/auth/auth.module.ts` |
+| User repository abstraction implemented | ✅ | `IUsersRepository` in `apps/api/src/users/users.repository.ts` |
+| Password hashing implemented | ✅ | `bcryptjs` with 10 salt rounds in `AuthService` |
+| Registration endpoint works | ✅ | `POST /api/v1/auth/register` (verified via tests & live runtime) |
+| Login endpoint works | ✅ | `POST /api/v1/auth/login` (verified via tests & live runtime) |
+| JWT signing and verification work | ✅ | `@nestjs/jwt` + Passport `JwtStrategy` |
+| Authentication guard works | ✅ | `JwtAuthGuard` in `apps/api/src/auth/guards/jwt-auth.guard.ts` |
+| `/auth/me` protected endpoint works | ✅ | `GET /api/v1/auth/me` with `@CurrentUser()` decorator |
+| Login frontend implemented | ✅ | `apps/web/app/login/page.tsx` |
+| Registration frontend implemented | ✅ | `apps/web/app/register/page.tsx` |
+| Environment configuration validated | ✅ | `auth.config.ts` fails safely in production if secrets missing |
+| Security tests pass | ✅ | `auth-security.spec.ts` (anti-enumeration, dev adapter lockout, complexity) |
+| Existing Module 01 tests still pass | ✅ | Health endpoint and worker tests continue to pass |
+| Typecheck passes | ✅ | `pnpm typecheck` (0 errors across 4 workspaces) |
+| Lint passes | ✅ | `pnpm lint` (0 errors across all workspaces) |
+| Production build passes | ✅ | `pnpm build` (all packages and static pages compiled) |
+| Documentation updated | ✅ | `MODULE_02_AUTHENTICATION.md`, `AUTH_SECURITY.md`, `AUTH_API.md` |
+| Development-only limitations clearly documented | ✅ | Explicit warnings that `InMemoryUsersRepository` resets on restart |
 
 ---
 
-## Verification Results (Module 01)
+## Verification Results (Module 02)
 
 ```
 1. Typecheck:
@@ -84,41 +79,55 @@ pnpm typecheck  → PASS (4/4 projects, 0 errors)
 pnpm lint       → PASS (0 errors, 0 warnings across all workspaces)
 
 3. Automated Tests:
-pnpm test       → PASS (3 suites, 5 tests passed)
-  - apps/api: 2 passed (HealthController definition, GET /health)
-  - apps/worker: 2 passed (Application metadata, Node runtime)
-  - apps/web: 1 passed (HomePage branding & foundation status)
+pnpm test       → PASS (11 suites, 42 tests passed across monorepo)
+  - apps/api: 7 suites, 37 passed
+    • health.controller.spec.ts (2 passed)
+    • users.service.spec.ts (4 passed)
+    • auth.service.spec.ts (8 passed)
+    • auth.controller.spec.ts (3 passed)
+    • jwt-auth.guard.spec.ts (5 passed)
+    • auth-security.spec.ts (8 passed)
+    • auth-flow.spec.ts (7 passed)
+  - apps/web: 3 suites, 3 passed
+    • page.spec.tsx (1 passed)
+    • login.spec.tsx (1 passed)
+    • register.spec.tsx (1 passed)
+  - apps/worker: 1 suite, 2 passed
+    • main.spec.ts (2 passed)
 
 4. Production Build:
 pnpm build      → PASS (packages/shared, apps/api, apps/worker, apps/web)
+  Routes generated:
+  ○ /
+  ○ /_not-found
+  ○ /login
+  ○ /register
 
-5. Real Runtime Health Check:
-GET http://localhost:3001/api/v1/health → 200 OK
-{
-  "application": "BHUVI",
-  "status": "healthy",
-  "version": "1.0.0",
-  "timestamp": "2026-11-06T07:06:46.292Z",
-  "uptime": 0
-}
+5. Real Runtime Endpoints (Live PowerShell HTTP Test):
+GET  /api/v1/health         → 200 OK (Module 01 backward compatibility)
+POST /api/v1/auth/register   → 201 Created (Safe user + JWT token)
+POST /api/v1/auth/register   → 409 Conflict (Duplicate email rejected)
+POST /api/v1/auth/login      → 200 OK (Safe user + JWT token)
+POST /api/v1/auth/login      → 401 Unauthorized (Invalid password rejected)
+GET  /api/v1/auth/me         → 200 OK with Bearer token (Returns authenticated profile)
+GET  /api/v1/auth/me         → 401 Unauthorized without token (Protected route blocked)
 
-6. Frontend HTTP Check:
-GET http://localhost:3000 → 200 OK
-  - Contains "BHUVI"
-  - Contains "Brain for Human Virtual Intelligence"
-  - Contains "Foundation initialized."
+6. Frontend Endpoints (Next.js Production Server):
+GET http://localhost:3000          → 200 OK
+GET http://localhost:3000/login     → 200 OK
+GET http://localhost:3000/register  → 200 OK
 ```
 
 ---
 
 ## Next Steps
 
-> ⏳ **Awaiting explicit user approval before beginning Module 02.**
+> ⏳ **Awaiting explicit user approval before beginning Module 03 (Database & Infrastructure).**
 
-Proposed Module 02 scope:
-- User entity & repository interface
-- Password hashing & verification with bcrypt
-- JWT token issuing, verification, and rotation
-- Auth controller (`/api/v1/auth/login`, `/api/v1/auth/register`, `/api/v1/auth/me`)
-- Authentication guard / middleware for protected routes
-- Login/registration view components in `apps/web`
+Proposed Module 03 scope:
+- PostgreSQL 16 database configuration.
+- Prisma 5 ORM setup in `@bhuvi/database`.
+- Prisma schema with `User` model, migrations, and seed scripts.
+- `PrismaUsersRepository` replacing `InMemoryUsersRepository`.
+- Redis 7 service configuration.
+- BullMQ queue setup for asynchronous worker tasks.
