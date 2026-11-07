@@ -2,6 +2,9 @@ import { validate } from 'class-validator';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { InMemoryUsersRepository } from '../users/users.repository';
+import { UsersService } from '../users/users.service';
+import { JwtStrategy } from './strategies/jwt.strategy';
+import { ConfigService } from '@nestjs/config';
 import authConfig from '../config/auth.config';
 
 describe('Auth Security Verification', () => {
@@ -28,6 +31,16 @@ describe('Auth Security Verification', () => {
     it('InMemoryUsersRepository initializes with warning in development mode', () => {
       process.env['NODE_ENV'] = 'development';
       expect(() => new InMemoryUsersRepository()).not.toThrow();
+    });
+
+    it('authConfig must throw error if AUTH_DEV_MODE is true in production', () => {
+      process.env['NODE_ENV'] = 'production';
+      process.env['AUTH_DEV_MODE'] = 'true';
+      process.env['JWT_SECRET'] = 'a_very_long_valid_jwt_secret_with_more_than_32_characters!';
+
+      expect(() => authConfig()).toThrow(
+        /AUTH_DEV_MODE cannot be enabled in production environment/i,
+      );
     });
   });
 
@@ -56,6 +69,18 @@ describe('Auth Security Verification', () => {
 
       expect(() => authConfig()).toThrow(
         /Insecure or placeholder JWT_SECRET detected/i,
+      );
+    });
+
+    it('JwtStrategy must fail if auth.jwtSecret is not provided by ConfigService', () => {
+      const mockConfigService = {
+        get: jest.fn().mockReturnValue(null),
+      } as unknown as ConfigService;
+
+      const mockUsersService = {} as unknown as UsersService;
+
+      expect(() => new JwtStrategy(mockConfigService, mockUsersService)).toThrow(
+        /FATAL: auth.jwtSecret configuration is required for JwtStrategy/i,
       );
     });
   });

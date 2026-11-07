@@ -15,3 +15,4 @@ describe('RegisterPage', () => {
     expect(screen.getByRole('link', { name: /Sign in here/i })).toBeDefined();
   });
 });
+

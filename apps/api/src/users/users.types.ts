@@ -7,3 +7,4 @@ export interface CreateUserData {
   name: string;
   passwordHash: string;
 }
+

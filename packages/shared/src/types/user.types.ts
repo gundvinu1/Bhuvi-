@@ -15,3 +15,4 @@ export interface SafeUser {
 
 /** User profile representation */
 export type UserProfile = SafeUser;
+

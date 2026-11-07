@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { API_PREFIX, APP_NAME, APP_VERSION } from '@bhuvi/shared';
 
@@ -12,6 +13,9 @@ async function bootstrap(): Promise<void> {
   // Global API prefix: /api/v1
   app.setGlobalPrefix(API_PREFIX);
 
+  // Cookie parser for secure HttpOnly cookie handling
+  app.use(cookieParser());
+
   // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
@@ -22,7 +26,7 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  // CORS – permissive for development; tighten in production (Module 18)
+  // CORS – with credentials enabled for secure cookies
   app.enableCors({
     origin: process.env['CORS_ORIGIN'] ?? 'http://localhost:3000',
     credentials: true,
@@ -35,4 +39,3 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap();
-

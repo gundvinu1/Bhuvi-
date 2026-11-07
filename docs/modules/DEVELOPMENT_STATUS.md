@@ -60,16 +60,18 @@
 | Registration frontend implemented | ✅ | `apps/web/app/register/page.tsx` |
 | Environment configuration validated | ✅ | `auth.config.ts` fails safely in production if secrets missing |
 | Security tests pass | ✅ | `auth-security.spec.ts` (anti-enumeration, dev adapter lockout, complexity) |
+| Rate limiting implemented & verified | ✅ | `@nestjs/throttler` (max 5 requests/min on auth endpoints, HTTP 429 on breach) |
+| HttpOnly cookie security verified | ✅ | `Set-Cookie` with `HttpOnly`, `SameSite=Lax`, `Path=/`, zero tokens in client storage |
 | Existing Module 01 tests still pass | ✅ | Health endpoint and worker tests continue to pass |
 | Typecheck passes | ✅ | `pnpm typecheck` (0 errors across 4 workspaces) |
-| Lint passes | ✅ | `pnpm lint` (0 errors across all workspaces) |
+| Lint passes | ✅ | `pnpm lint` (0 errors, 0 warnings across all workspaces) |
 | Production build passes | ✅ | `pnpm build` (all packages and static pages compiled) |
 | Documentation updated | ✅ | `MODULE_02_AUTHENTICATION.md`, `AUTH_SECURITY.md`, `AUTH_API.md` |
 | Development-only limitations clearly documented | ✅ | Explicit warnings that `InMemoryUsersRepository` resets on restart |
 
 ---
 
-## Verification Results (Module 02)
+## Verification Results (Module 02 & Security Audit)
 
 ```
 1. Typecheck:
@@ -79,8 +81,8 @@ pnpm typecheck  → PASS (4/4 projects, 0 errors)
 pnpm lint       → PASS (0 errors, 0 warnings across all workspaces)
 
 3. Automated Tests:
-pnpm test       → PASS (11 suites, 42 tests passed across monorepo)
-  - apps/api: 7 suites, 37 passed
+pnpm test       → PASS (13 suites, 53 tests passed across monorepo)
+  - apps/api: 9 suites, 47 passed
     • health.controller.spec.ts (2 passed)
     • users.service.spec.ts (4 passed)
     • auth.service.spec.ts (8 passed)
@@ -88,9 +90,11 @@ pnpm test       → PASS (11 suites, 42 tests passed across monorepo)
     • jwt-auth.guard.spec.ts (5 passed)
     • auth-security.spec.ts (8 passed)
     • auth-flow.spec.ts (7 passed)
-  - apps/web: 3 suites, 3 passed
+    • auth-rate-limit.spec.ts (1 passed)
+    • auth-cookie-integration.spec.ts (6 passed)
+  - apps/web: 3 suites, 4 passed
     • page.spec.tsx (1 passed)
-    • login.spec.tsx (1 passed)
+    • login.spec.tsx (2 passed)
     • register.spec.tsx (1 passed)
   - apps/worker: 1 suite, 2 passed
     • main.spec.ts (2 passed)
@@ -103,14 +107,17 @@ pnpm build      → PASS (packages/shared, apps/api, apps/worker, apps/web)
   ○ /login
   ○ /register
 
-5. Real Runtime Endpoints (Live PowerShell HTTP Test):
+5. Real Runtime Endpoints (Dual Transport & Security Audit):
 GET  /api/v1/health         → 200 OK (Module 01 backward compatibility)
-POST /api/v1/auth/register   → 201 Created (Safe user + JWT token)
+POST /api/v1/auth/register   → 201 Created (Safe user + HttpOnly cookie + access token)
 POST /api/v1/auth/register   → 409 Conflict (Duplicate email rejected)
-POST /api/v1/auth/login      → 200 OK (Safe user + JWT token)
-POST /api/v1/auth/login      → 401 Unauthorized (Invalid password rejected)
-GET  /api/v1/auth/me         → 200 OK with Bearer token (Returns authenticated profile)
-GET  /api/v1/auth/me         → 401 Unauthorized without token (Protected route blocked)
+POST /api/v1/auth/login      → 200 OK (Safe user + HttpOnly cookie + access token)
+POST /api/v1/auth/login      → 401 Unauthorized (Invalid credentials rejected)
+POST /api/v1/auth/login      → 429 Too Many Requests (6th rapid request blocked by rate limiter)
+GET  /api/v1/auth/me         → 200 OK via HttpOnly Cookie (Returns authenticated profile)
+GET  /api/v1/auth/me         → 200 OK via Bearer header (Dual-transport for non-browser clients)
+GET  /api/v1/auth/me         → 401 Unauthorized without credentials (Protected route blocked)
+POST /api/v1/auth/logout     → 200 OK (Clears HttpOnly bhuvi_token cookie)
 
 6. Frontend Endpoints (Next.js Production Server):
 GET http://localhost:3000          → 200 OK

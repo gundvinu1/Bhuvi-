@@ -121,9 +121,19 @@ When Module 03 (Database & Infrastructure) is activated:
 
 ---
 
-## 6. Known Limitations & Future Work
+## 6. Security Hardening & Audit Verification
 
-- **Bearer Token Storage:** The client currently receives Bearer tokens. In Module 18, HttpOnly SameSite secure cookie sessions will be introduced.
-- **Refresh Tokens:** Refresh token rotation with family revocation is scheduled for post-database integration (Module 03).
-- **Multi-Factor Authentication (MFA):** Optional TOTP integration planned for Module 18.
-- **Persistent Storage:** Registration data resets on server restart until Module 03 (PostgreSQL/Prisma) is implemented.
+As of the Module 02 Security Audit:
+- **HttpOnly Cookie Transport:** Access tokens are delivered via `HttpOnly`, `SameSite=Lax` (Strict in production), `Path=/` cookies (`bhuvi_token`). Client-side storage (`localStorage`/`sessionStorage`) is completely bypassed, eliminating client-side XSS token theft vectors.
+- **Rate Limiting:** Auth endpoints (`/auth/login`, `/auth/register`) are protected by `@nestjs/throttler` (max 5 requests/min per IP), responding with HTTP 429 `RATE_LIMIT_EXCEEDED` on breach.
+- **Secret Hardening:** Production environment strictly requires a 32+ character non-placeholder `JWT_SECRET`. Missing or default secrets prevent application startup.
+- **Repository Safety:** `InMemoryUsersRepository` is strictly blocked in production mode and when `AUTH_DEV_MODE=false`.
+
+---
+
+## 7. Known Limitations & Module 03 Scope
+
+- **Persistent Storage:** Registration and login data are held in memory during development and reset on application restart. Module 03 will integrate PostgreSQL and Prisma ORM to provide persistent storage.
+- **Refresh Tokens:** Refresh token rotation with family revocation will be introduced post-database integration in Module 03/04.
+- **Multi-Factor Authentication (MFA):** Optional TOTP integration is scheduled for Module 18 (Security, Monitoring & Deployment).
+

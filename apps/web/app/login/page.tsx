@@ -2,14 +2,14 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { APP_FULL_NAME, APP_NAME, ApiResponse, AuthResponseData } from '@bhuvi/shared';
+import { APP_FULL_NAME, APP_NAME, ApiResponse, AuthResponseData, SafeUser } from '@bhuvi/shared';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [authSuccess, setAuthSuccess] = useState<AuthResponseData | null>(null);
+  const [verifiedUser, setVerifiedUser] = useState<SafeUser | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,8 +31,11 @@ export default function LoginPage() {
 
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-      const response = await fetch(`${apiBase}/auth/login`, {
+
+      // 1. Submit login request with credentials: 'include' for HttpOnly cookie
+      const loginRes = await fetch(`${apiBase}/auth/login`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -42,19 +45,33 @@ export default function LoginPage() {
         }),
       });
 
-      const data = (await response.json()) as ApiResponse<AuthResponseData> & {
+      const loginData = (await loginRes.json()) as ApiResponse<AuthResponseData> & {
         error?: { message: string };
       };
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error?.message || 'Invalid email or password.');
+      if (!loginRes.ok || !loginData.success) {
+        throw new Error(loginData.error?.message || 'Invalid email or password.');
       }
 
-      setAuthSuccess(data.data);
-      // In-memory / session storage for dev; production will use HttpOnly SameSite cookies (Module 18)
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('bhuvi_token', data.data.accessToken);
+      // 2. Direct frontend-backend verification: test authenticated access to /api/v1/auth/me
+      const meRes = await fetch(`${apiBase}/auth/me`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          Authorization: `Bearer ${loginData.data.accessToken}`,
+        },
+      });
+
+      const meData = (await meRes.json()) as ApiResponse<SafeUser> & {
+        error?: { message: string };
+      };
+
+      if (!meRes.ok || !meData.success) {
+        throw new Error('Authentication succeeded but failed to verify profile via /auth/me.');
       }
+
+      // Set verified user state from the /auth/me profile
+      setVerifiedUser(meData.data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred during login.');
     } finally {
@@ -62,11 +79,18 @@ export default function LoginPage() {
     }
   };
 
-  const handleLogout = () => {
-    setAuthSuccess(null);
-    setPassword('');
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('bhuvi_token');
+  const handleLogout = async () => {
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      await fetch(`${apiBase}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // Ignore network errors on logout
+    } finally {
+      setVerifiedUser(null);
+      setPassword('');
     }
   };
 
@@ -92,22 +116,22 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="glass-panel p-8 space-y-6 shadow-2xl">
-          {authSuccess ? (
+          {verifiedUser ? (
             <div className="space-y-4 text-center">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 mb-2">
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 className="text-xl font-bold text-white">Authentication Successful</h2>
+              <h2 className="text-xl font-bold text-white">Session Verified</h2>
               <p className="text-sm text-gray-300">
-                Welcome back, <span className="font-semibold text-bhuvi-300">{authSuccess.user.name}</span>!
+                Welcome back, <span className="font-semibold text-bhuvi-300">{verifiedUser.name}</span>!
               </p>
               <div className="p-3 bg-white/5 rounded-lg text-left text-xs font-mono text-gray-400 space-y-1">
-                <div><span className="text-gray-500">Email:</span> {authSuccess.user.email}</div>
-                <div><span className="text-gray-500">User ID:</span> {authSuccess.user.id}</div>
-                <div><span className="text-gray-500">Access Token:</span> {authSuccess.accessToken.slice(0, 18)}...</div>
-                <div><span className="text-gray-500">Expires In:</span> {authSuccess.expiresIn}</div>
+                <div><span className="text-gray-500">Email:</span> {verifiedUser.email}</div>
+                <div><span className="text-gray-500">User ID:</span> {verifiedUser.id}</div>
+                <div><span className="text-gray-500">Storage:</span> Secure HttpOnly Cookie</div>
+                <div><span className="text-gray-500">Profile Status:</span> Verified via /api/v1/auth/me</div>
               </div>
               <p className="text-xs text-gray-400">
                 Full dashboard and task center will be available in Module 04.

@@ -15,9 +15,10 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
-        const secret =
-          configService.get<string>('auth.jwtSecret') ??
-          'bhuvi_dev_super_secret_jwt_key_min_32_characters_for_testing';
+        const secret = configService.get<string>('auth.jwtSecret');
+        if (!secret) {
+          throw new Error('FATAL: auth.jwtSecret configuration is required for JwtModule');
+        }
         const expiresIn = configService.get<string>('auth.jwtExpiresIn') ?? '15m';
 
         return {

@@ -6,7 +6,10 @@ Base URL: `http://localhost:3001/api/v1`
 
 ## 1. POST /api/v1/auth/register
 
-Registers a new user and returns a signed access token.
+Registers a new user, sets an `HttpOnly` cookie, and returns a signed access token.
+
+### Rate Limit
+- **5 requests per 60 seconds** per client IP.
 
 ### Request
 
@@ -24,6 +27,12 @@ Content-Type: application/json
 
 ### Success Response (201 Created)
 
+**Headers:**
+```http
+Set-Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; Expires=Sat, 07 Nov 2026 10:20:00 GMT; HttpOnly; SameSite=Lax
+```
+
+**Body:**
 ```json
 {
   "success": true,
@@ -80,11 +89,29 @@ Content-Type: application/json
 }
 ```
 
+#### 429 Too Many Requests (Rate Limit Exceeded)
+```json
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Too many requests. Please slow down and try again later."
+  },
+  "meta": {
+    "timestamp": "2026-11-07T03:43:55.450Z",
+    "version": "1.0.0"
+  }
+}
+```
+
 ---
 
 ## 2. POST /api/v1/auth/login
 
-Authenticates credentials and returns a signed access token.
+Authenticates credentials, sets an `HttpOnly` cookie, and returns a signed access token.
+
+### Rate Limit
+- **5 requests per 60 seconds** per client IP.
 
 ### Request
 
@@ -101,6 +128,12 @@ Content-Type: application/json
 
 ### Success Response (200 OK)
 
+**Headers:**
+```http
+Set-Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; Expires=Sat, 07 Nov 2026 10:20:00 GMT; HttpOnly; SameSite=Lax
+```
+
+**Body:**
 ```json
 {
   "success": true,
@@ -139,17 +172,38 @@ Content-Type: application/json
 }
 ```
 
+#### 429 Too Many Requests (Rate Limit Exceeded)
+```json
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMIT_EXCEEDED",
+    "message": "Too many requests. Please slow down and try again later."
+  },
+  "meta": {
+    "timestamp": "2026-11-07T03:43:55.580Z",
+    "version": "1.0.0"
+  }
+}
+```
+
 ---
 
 ## 3. GET /api/v1/auth/me
 
-Returns the authenticated user's safe profile. Requires a valid JWT Bearer token in the `Authorization` header.
+Returns the authenticated user's safe profile. Supports dual-transport authentication:
+- **Option A:** Automatic `bhuvi_token` HttpOnly cookie.
+- **Option B:** `Authorization: Bearer <token>` HTTP header.
 
 ### Request
 
 ```http
 GET /api/v1/auth/me HTTP/1.1
 Host: localhost:3001
+Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+*Or via header:*
+```http
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
@@ -184,6 +238,41 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
   },
   "meta": {
     "timestamp": "2026-11-07T03:43:55.650Z",
+    "version": "1.0.0"
+  }
+}
+```
+
+---
+
+## 4. POST /api/v1/auth/logout
+
+Terminates the session and clears the `bhuvi_token` HttpOnly cookie.
+
+### Request
+
+```http
+POST /api/v1/auth/logout HTTP/1.1
+Host: localhost:3001
+Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+### Success Response (200 OK)
+
+**Headers:**
+```http
+Set-Cookie: bhuvi_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly
+```
+
+**Body:**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Logged out successfully"
+  },
+  "meta": {
+    "timestamp": "2026-11-07T03:43:55.700Z",
     "version": "1.0.0"
   }
 }

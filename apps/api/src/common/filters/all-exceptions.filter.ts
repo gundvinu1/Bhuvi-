@@ -66,6 +66,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       case HttpStatus.CONFLICT:
         errorCode = BhuviErrorCode.USER_ALREADY_EXISTS;
         break;
+      case HttpStatus.TOO_MANY_REQUESTS:
+        errorCode = BhuviErrorCode.RATE_LIMIT_EXCEEDED;
+        break;
       case HttpStatus.INTERNAL_SERVER_ERROR:
         errorCode = BhuviErrorCode.INTERNAL;
         break;

@@ -53,6 +53,7 @@ export default function RegisterPage() {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
       const response = await fetch(`${apiBase}/auth/register`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -72,9 +73,6 @@ export default function RegisterPage() {
       }
 
       setRegisteredUser(data.data);
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('bhuvi_token', data.data.accessToken);
-      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred during registration.');
     } finally {
@@ -246,3 +244,4 @@ export default function RegisterPage() {
     </main>
   );
 }
+
