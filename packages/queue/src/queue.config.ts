@@ -5,7 +5,7 @@ export interface RedisConfigOptions {
   port: number;
   password?: string;
   maxRetriesPerRequest: null; // Required by BullMQ
-  enableReadyCheck: false;    // Recommended for BullMQ
+  enableReadyCheck: false; // Recommended for BullMQ
   lazyConnect?: boolean;
 }
 

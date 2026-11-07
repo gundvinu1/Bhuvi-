@@ -87,17 +87,15 @@ export class BhuviWorker {
     this.logger.log(`   Queue Name  : ${DEFAULT_QUEUE_NAME}`);
 
     try {
-      this.worker = new Worker(
-        DEFAULT_QUEUE_NAME,
-        async (job: Job) => this.processJob(job),
-        {
-          connection: getRedisConnectionOptions(),
-          concurrency: 5,
-        },
-      );
+      this.worker = new Worker(DEFAULT_QUEUE_NAME, async (job: Job) => this.processJob(job), {
+        connection: getRedisConnectionOptions(),
+        concurrency: 5,
+      });
 
       this.worker.on('ready', () => {
-        this.logger.log(`✓ BullMQ worker connected to Redis and ready for queue: ${DEFAULT_QUEUE_NAME}`);
+        this.logger.log(
+          `✓ BullMQ worker connected to Redis and ready for queue: ${DEFAULT_QUEUE_NAME}`,
+        );
       });
 
       this.worker.on('active', (job) => {

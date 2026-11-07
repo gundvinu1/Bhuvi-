@@ -105,7 +105,10 @@ export default function LoginPage() {
       <div className="relative z-10 max-w-md w-full space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <Link href="/" className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bhuvi-gradient shadow-xl mb-2">
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bhuvi-gradient shadow-xl mb-2"
+          >
             <span className="text-2xl font-black text-white">B</span>
           </Link>
           <h1 className="text-3xl font-extrabold tracking-tight text-white">{APP_NAME} Login</h1>
@@ -120,18 +123,33 @@ export default function LoginPage() {
             <div className="space-y-4 text-center">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 mb-2">
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
               </div>
               <h2 className="text-xl font-bold text-white">Session Verified</h2>
               <p className="text-sm text-gray-300">
-                Welcome back, <span className="font-semibold text-bhuvi-300">{verifiedUser.name}</span>!
+                Welcome back,{' '}
+                <span className="font-semibold text-bhuvi-300">{verifiedUser.name}</span>!
               </p>
               <div className="p-3 bg-white/5 rounded-lg text-left text-xs font-mono text-gray-400 space-y-1">
-                <div><span className="text-gray-500">Email:</span> {verifiedUser.email}</div>
-                <div><span className="text-gray-500">User ID:</span> {verifiedUser.id}</div>
-                <div><span className="text-gray-500">Storage:</span> Secure HttpOnly Cookie</div>
-                <div><span className="text-gray-500">Profile Status:</span> Verified via /api/v1/auth/me</div>
+                <div>
+                  <span className="text-gray-500">Email:</span> {verifiedUser.email}
+                </div>
+                <div>
+                  <span className="text-gray-500">User ID:</span> {verifiedUser.id}
+                </div>
+                <div>
+                  <span className="text-gray-500">Storage:</span> Secure HttpOnly Cookie
+                </div>
+                <div>
+                  <span className="text-gray-500">Profile Status:</span> Verified via
+                  /api/v1/auth/me
+                </div>
               </div>
               <p className="text-xs text-gray-400">
                 Full dashboard and task center will be available in Module 04.
@@ -143,10 +161,7 @@ export default function LoginPage() {
                 >
                   Sign Out
                 </button>
-                <Link
-                  href="/"
-                  className="text-xs text-bhuvi-400 hover:text-bhuvi-300 transition"
-                >
+                <Link href="/" className="text-xs text-bhuvi-400 hover:text-bhuvi-300 transition">
                   Return to Home
                 </Link>
               </div>
@@ -179,7 +194,10 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-300 mb-1.5" htmlFor="password">
+                <label
+                  className="block text-xs font-medium text-gray-300 mb-1.5"
+                  htmlFor="password"
+                >
                   Password
                 </label>
                 <input
@@ -201,8 +219,19 @@ export default function LoginPage() {
               >
                 {loading ? (
                   <>
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <svg
+                      className="animate-spin h-4 w-4 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                     </svg>
                     <span>Authenticating...</span>
@@ -215,7 +244,10 @@ export default function LoginPage() {
               <div className="pt-2 text-center">
                 <p className="text-xs text-gray-400">
                   Don&apos;t have an account?{' '}
-                  <Link href="/register" className="text-bhuvi-400 hover:text-bhuvi-300 font-medium transition">
+                  <Link
+                    href="/register"
+                    className="text-bhuvi-400 hover:text-bhuvi-300 font-medium transition"
+                  >
                     Register here
                   </Link>
                 </p>

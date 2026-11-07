@@ -3,6 +3,7 @@
 ## 1. Migration History
 
 ### Migration 1: `20261107000000_init_user`
+
 - **Date:** 2026-11-07
 - **Target Table:** `users`
 - **Changes:**
@@ -11,6 +12,7 @@
   - Sets default timestamp on `created_at` and triggers on `updated_at`.
 
 SQL Reference:
+
 ```sql
 CREATE TABLE "users" (
     "id" TEXT NOT NULL,

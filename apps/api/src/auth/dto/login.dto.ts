@@ -14,4 +14,3 @@ export class LoginDto implements LoginRequest {
   @IsNotEmpty({ message: 'Password is required' })
   password!: string;
 }
-

@@ -34,28 +34,33 @@ BHUVI follows a **monorepo, event-driven, modular** architecture designed for lo
 ## Design Principles
 
 ### 1. Local-First
+
 All AI processing happens via Ollama on the local machine. No data leaves the device without explicit user approval.
 
 ### 2. Modular
+
 Each capability is implemented as an isolated package under `packages/`. Modules have declared dependencies and can be developed and tested independently.
 
 ### 3. Event-Driven
+
 Background work is processed through BullMQ queues (Module 03). This decouples triggers from execution and enables retry logic and prioritization.
 
 ### 4. API-First
+
 All functionality is exposed through versioned REST endpoints (`/api/v1`). The frontend consumes the same API as any future mobile client.
 
 ### 5. Security by Default
+
 Secrets are never hardcoded. Authentication is required for all API routes (Module 02). All integrations require explicit user approval.
 
 ## Communication Patterns
 
-| Pattern | Use Case | Technology |
-|---------|----------|------------|
-| Request/Response | UI → API | REST HTTP |
-| Background Jobs | Scheduled processing | BullMQ + Redis |
-| Real-time Updates | Notifications | WebSocket (future) |
-| Local AI | LLM inference | Ollama HTTP API |
+| Pattern           | Use Case             | Technology         |
+| ----------------- | -------------------- | ------------------ |
+| Request/Response  | UI → API             | REST HTTP          |
+| Background Jobs   | Scheduled processing | BullMQ + Redis     |
+| Real-time Updates | Notifications        | WebSocket (future) |
+| Local AI          | LLM inference        | Ollama HTTP API    |
 
 ## Module Dependency Graph
 
@@ -90,12 +95,11 @@ Email Arrives → Gmail Webhook → Worker Queue → Message Intelligence
 
 ## Port Allocation
 
-| Service | Port | Notes |
-|---------|------|-------|
-| Web (Next.js) | 3000 | Frontend |
-| API (NestJS) | 3001 | REST API |
-| Worker | 3002 | Internal only |
-| PostgreSQL | 5432 | Module 03 |
-| Redis | 6379 | Module 03 |
-| Ollama | 11434 | Module 05 |
-
+| Service       | Port  | Notes         |
+| ------------- | ----- | ------------- |
+| Web (Next.js) | 3000  | Frontend      |
+| API (NestJS)  | 3001  | REST API      |
+| Worker        | 3002  | Internal only |
+| PostgreSQL    | 5432  | Module 03     |
+| Redis         | 6379  | Module 03     |
+| Ollama        | 11434 | Module 05     |

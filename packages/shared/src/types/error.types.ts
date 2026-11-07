@@ -42,7 +42,9 @@ export class BhuviError extends Error {
     this.code = code;
     this.details = details;
     // Maintains proper stack trace in V8 (available in Node.js but not in TypeScript's Error type)
-    const errorCtor = Error as unknown as { captureStackTrace?: (target: object, ctor: unknown) => void };
+    const errorCtor = Error as unknown as {
+      captureStackTrace?: (target: object, ctor: unknown) => void;
+    };
     if (errorCtor.captureStackTrace) {
       errorCtor.captureStackTrace(this, BhuviError);
     }
@@ -67,7 +69,11 @@ export class ValidationError extends BhuviError {
 
 /** Authentication error */
 export class AuthenticationError extends BhuviError {
-  constructor(message: string, code: BhuviErrorCode = BhuviErrorCode.UNAUTHORIZED, details?: unknown) {
+  constructor(
+    message: string,
+    code: BhuviErrorCode = BhuviErrorCode.UNAUTHORIZED,
+    details?: unknown,
+  ) {
     super(code, message, details);
     this.name = 'AuthenticationError';
   }

@@ -9,4 +9,3 @@ Auth helpers, secrets management, and audit logging
 ## Status
 
 📋 **Planned** – Not yet implemented.
-

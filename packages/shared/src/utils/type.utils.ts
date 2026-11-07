@@ -3,9 +3,7 @@
 // ============================================================
 
 /** Make all properties of T optional recursively */
-export type DeepPartial<T> = T extends object
-  ? { [K in keyof T]?: DeepPartial<T[K]> }
-  : T;
+export type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> } : T;
 
 /** Make selected keys required */
 export type RequireKeys<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>;
@@ -43,4 +41,3 @@ export function isObject(value: unknown): value is Record<string, unknown> {
 export function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
-

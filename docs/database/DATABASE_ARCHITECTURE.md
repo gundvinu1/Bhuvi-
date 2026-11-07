@@ -64,6 +64,7 @@ model User {
 ```
 
 ### Table & Column Mapping
+
 - Table name is explicitly mapped to snake_case `"users"`.
 - Column names are mapped to snake_case (`password_hash`, `created_at`, `updated_at`) conforming to PostgreSQL conventions.
 - Field types match domain types in `@bhuvi/shared`:

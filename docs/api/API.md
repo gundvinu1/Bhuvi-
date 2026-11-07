@@ -9,12 +9,14 @@
 Returns the current API health status.
 
 **Request**
+
 ```http
 GET /api/v1/health HTTP/1.1
 Host: localhost:3001
 ```
 
 **Response (200 OK)**
+
 ```json
 {
   "application": "BHUVI",
@@ -25,13 +27,13 @@ Host: localhost:3001
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `application` | string | Always `"BHUVI"` |
-| `status` | `"healthy"` \| `"degraded"` \| `"unhealthy"` | Current status |
-| `version` | string | Application version |
-| `timestamp` | ISO 8601 string | Server timestamp at time of request |
-| `uptime` | number | Seconds since server started |
+| Field         | Type                                         | Description                         |
+| ------------- | -------------------------------------------- | ----------------------------------- |
+| `application` | string                                       | Always `"BHUVI"`                    |
+| `status`      | `"healthy"` \| `"degraded"` \| `"unhealthy"` | Current status                      |
+| `version`     | string                                       | Application version                 |
+| `timestamp`   | ISO 8601 string                              | Server timestamp at time of request |
+| `uptime`      | number                                       | Seconds since server started        |
 
 > **Note:** This endpoint does **not** report database, Redis, or Ollama status as these are not yet integrated.
 
@@ -56,10 +58,9 @@ All errors follow the standard error envelope:
 
 ## Future Endpoints (Planned)
 
-| Method | Path | Module | Description |
-|--------|------|--------|-------------|
-| POST | `/api/v1/auth/login` | 02 | User authentication |
-| GET | `/api/v1/messages` | 07 | List monitored messages |
-| POST | `/api/v1/commands` | 14 | Submit natural language command |
-| GET | `/api/v1/intelligence/morning` | 13 | Morning briefing |
-
+| Method | Path                           | Module | Description                     |
+| ------ | ------------------------------ | ------ | ------------------------------- |
+| POST   | `/api/v1/auth/login`           | 02     | User authentication             |
+| GET    | `/api/v1/messages`             | 07     | List monitored messages         |
+| POST   | `/api/v1/commands`             | 14     | Submit natural language command |
+| GET    | `/api/v1/intelligence/morning` | 13     | Morning briefing                |

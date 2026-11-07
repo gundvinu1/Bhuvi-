@@ -9,6 +9,7 @@ Base URL: `http://localhost:3001/api/v1`
 Registers a new user, sets an `HttpOnly` cookie, and returns a signed access token.
 
 ### Rate Limit
+
 - **5 requests per 60 seconds** per client IP.
 
 ### Request
@@ -28,11 +29,13 @@ Content-Type: application/json
 ### Success Response (201 Created)
 
 **Headers:**
+
 ```http
 Set-Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; Expires=Sat, 07 Nov 2026 10:20:00 GMT; HttpOnly; SameSite=Lax
 ```
 
 **Body:**
+
 ```json
 {
   "success": true,
@@ -57,6 +60,7 @@ Set-Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; Expires
 ### Error Responses
 
 #### 400 Bad Request (Validation Failed)
+
 ```json
 {
   "success": false,
@@ -75,6 +79,7 @@ Set-Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; Expires
 ```
 
 #### 409 Conflict (Duplicate Email)
+
 ```json
 {
   "success": false,
@@ -90,6 +95,7 @@ Set-Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; Expires
 ```
 
 #### 429 Too Many Requests (Rate Limit Exceeded)
+
 ```json
 {
   "success": false,
@@ -111,6 +117,7 @@ Set-Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; Expires
 Authenticates credentials, sets an `HttpOnly` cookie, and returns a signed access token.
 
 ### Rate Limit
+
 - **5 requests per 60 seconds** per client IP.
 
 ### Request
@@ -129,11 +136,13 @@ Content-Type: application/json
 ### Success Response (200 OK)
 
 **Headers:**
+
 ```http
 Set-Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; Expires=Sat, 07 Nov 2026 10:20:00 GMT; HttpOnly; SameSite=Lax
 ```
 
 **Body:**
+
 ```json
 {
   "success": true,
@@ -158,6 +167,7 @@ Set-Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; Expires
 ### Error Responses
 
 #### 401 Unauthorized (Invalid Credentials)
+
 ```json
 {
   "success": false,
@@ -173,6 +183,7 @@ Set-Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; Expires
 ```
 
 #### 429 Too Many Requests (Rate Limit Exceeded)
+
 ```json
 {
   "success": false,
@@ -192,6 +203,7 @@ Set-Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...; Path=/; Expires
 ## 3. GET /api/v1/auth/me
 
 Returns the authenticated user's safe profile. Supports dual-transport authentication:
+
 - **Option A:** Automatic `bhuvi_token` HttpOnly cookie.
 - **Option B:** `Authorization: Bearer <token>` HTTP header.
 
@@ -202,7 +214,9 @@ GET /api/v1/auth/me HTTP/1.1
 Host: localhost:3001
 Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
-*Or via header:*
+
+_Or via header:_
+
 ```http
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
@@ -229,6 +243,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ### Error Responses
 
 #### 401 Unauthorized (Missing or Expired Token)
+
 ```json
 {
   "success": false,
@@ -260,11 +275,13 @@ Cookie: bhuvi_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ### Success Response (200 OK)
 
 **Headers:**
+
 ```http
 Set-Cookie: bhuvi_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly
 ```
 
 **Body:**
+
 ```json
 {
   "success": true,

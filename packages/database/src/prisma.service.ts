@@ -59,7 +59,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         this.isConnected = false;
         this.logger.log('✓ PostgreSQL disconnected cleanly');
       } catch (err: unknown) {
-        this.logger.error('Error during PostgreSQL disconnect', err instanceof Error ? err : undefined);
+        this.logger.error(
+          'Error during PostgreSQL disconnect',
+          err instanceof Error ? err : undefined,
+        );
       }
     }
   }

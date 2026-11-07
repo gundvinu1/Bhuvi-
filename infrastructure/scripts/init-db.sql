@@ -11,3 +11,4 @@ DO $$
 BEGIN
   RAISE NOTICE 'BHUVI PostgreSQL 16 database initialized successfully.';
 END $$;
+

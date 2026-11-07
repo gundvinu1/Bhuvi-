@@ -17,7 +17,9 @@ export function parseSanitizedDatabaseConfig(url?: string): SanitizedDatabaseCon
       port: parsed.port ? parseInt(parsed.port, 10) : 5432,
       database: parsed.pathname ? parsed.pathname.replace(/^\//, '') : 'bhuvi',
       user: parsed.username || 'unknown',
-      ssl: parsed.searchParams.get('sslmode') === 'require' || parsed.searchParams.get('ssl') === 'true',
+      ssl:
+        parsed.searchParams.get('sslmode') === 'require' ||
+        parsed.searchParams.get('ssl') === 'true',
     };
   } catch {
     return {

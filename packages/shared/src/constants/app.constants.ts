@@ -50,4 +50,3 @@ export const MODULES = {
   MOBILE: 'module:17:mobile',
   SECURITY: 'module:18:security',
 } as const;
-

@@ -9,4 +9,3 @@ Morning intelligence reports and push notifications
 ## Status
 
 📋 **Planned** – Not yet implemented.
-

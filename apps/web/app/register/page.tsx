@@ -34,7 +34,8 @@ export default function RegisterPage() {
       return;
     }
 
-    const complexityRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d|.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).*$/;
+    const complexityRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d|.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).*$/;
     if (!complexityRegex.test(password)) {
       setError(
         'Password must contain at least one uppercase letter, one lowercase letter, and one number or special character.',
@@ -74,7 +75,9 @@ export default function RegisterPage() {
 
       setRegisteredUser(data.data);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred during registration.');
+      setError(
+        err instanceof Error ? err.message : 'An unexpected error occurred during registration.',
+      );
     } finally {
       setLoading(false);
     }
@@ -91,10 +94,15 @@ export default function RegisterPage() {
       <div className="relative z-10 max-w-md w-full space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <Link href="/" className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bhuvi-gradient shadow-xl mb-2">
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bhuvi-gradient shadow-xl mb-2"
+          >
             <span className="text-2xl font-black text-white">B</span>
           </Link>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">{APP_NAME} Registration</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white">
+            {APP_NAME} Registration
+          </h1>
           <p className="text-xs text-bhuvi-300 font-medium tracking-wide uppercase">
             {APP_FULL_NAME}
           </p>
@@ -106,17 +114,31 @@ export default function RegisterPage() {
             <div className="space-y-4 text-center">
               <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 mb-2">
                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
               </div>
               <h2 className="text-xl font-bold text-white">Registration Complete</h2>
               <p className="text-sm text-gray-300">
-                Your local profile for <span className="font-semibold text-bhuvi-300">{registeredUser.user.name}</span> has been created!
+                Your local profile for{' '}
+                <span className="font-semibold text-bhuvi-300">{registeredUser.user.name}</span> has
+                been created!
               </p>
               <div className="p-3 bg-white/5 rounded-lg text-left text-xs font-mono text-gray-400 space-y-1">
-                <div><span className="text-gray-500">Email:</span> {registeredUser.user.email}</div>
-                <div><span className="text-gray-500">User ID:</span> {registeredUser.user.id}</div>
-                <div><span className="text-gray-500">Token:</span> {registeredUser.accessToken.slice(0, 18)}...</div>
+                <div>
+                  <span className="text-gray-500">Email:</span> {registeredUser.user.email}
+                </div>
+                <div>
+                  <span className="text-gray-500">User ID:</span> {registeredUser.user.id}
+                </div>
+                <div>
+                  <span className="text-gray-500">Token:</span>{' '}
+                  {registeredUser.accessToken.slice(0, 18)}...
+                </div>
               </div>
               <div className="pt-2 flex flex-col gap-2">
                 <Link
@@ -125,10 +147,7 @@ export default function RegisterPage() {
                 >
                   Proceed to Sign In
                 </Link>
-                <Link
-                  href="/"
-                  className="text-xs text-bhuvi-400 hover:text-bhuvi-300 transition"
-                >
+                <Link href="/" className="text-xs text-bhuvi-400 hover:text-bhuvi-300 transition">
                   Return to Home
                 </Link>
               </div>
@@ -175,7 +194,10 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-300 mb-1.5" htmlFor="password">
+                <label
+                  className="block text-xs font-medium text-gray-300 mb-1.5"
+                  htmlFor="password"
+                >
                   Password
                 </label>
                 <input
@@ -193,7 +215,10 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-300 mb-1.5" htmlFor="confirmPassword">
+                <label
+                  className="block text-xs font-medium text-gray-300 mb-1.5"
+                  htmlFor="confirmPassword"
+                >
                   Confirm Password
                 </label>
                 <input
@@ -214,8 +239,19 @@ export default function RegisterPage() {
               >
                 {loading ? (
                   <>
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <svg
+                      className="animate-spin h-4 w-4 text-white"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                     </svg>
                     <span>Creating Account...</span>
@@ -228,7 +264,10 @@ export default function RegisterPage() {
               <div className="pt-2 text-center">
                 <p className="text-xs text-gray-400">
                   Already have an account?{' '}
-                  <Link href="/login" className="text-bhuvi-400 hover:text-bhuvi-300 font-medium transition">
+                  <Link
+                    href="/login"
+                    className="text-bhuvi-400 hover:text-bhuvi-300 font-medium transition"
+                  >
                     Sign in here
                   </Link>
                 </p>
@@ -244,4 +283,3 @@ export default function RegisterPage() {
     </main>
   );
 }
-

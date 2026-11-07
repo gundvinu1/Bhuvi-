@@ -38,9 +38,7 @@ describe('Auth Rate Limiting Security', () => {
 
     // 5 attempts allowed by the throttle limit
     for (let i = 0; i < 5; i++) {
-      const res = await request(app.getHttpServer())
-        .post('/api/v1/auth/login')
-        .send(payload);
+      const res = await request(app.getHttpServer()).post('/api/v1/auth/login').send(payload);
 
       // Status will be 401 because credentials don't exist, but NOT 429
       expect(res.status).toBe(HttpStatus.UNAUTHORIZED);

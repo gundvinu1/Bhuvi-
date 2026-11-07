@@ -9,4 +9,3 @@ Gmail, WhatsApp and social media connectors
 ## Status
 
 📋 **Planned** – Not yet implemented.
-

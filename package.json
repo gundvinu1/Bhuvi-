@@ -24,6 +24,7 @@
     "lint:fix": "pnpm --recursive lint:fix",
     "typecheck": "pnpm --recursive typecheck",
     "test": "pnpm --recursive test",
+    "test:infra": "node scripts/verify-real-infrastructure-e2e.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore",
     "clean": "pnpm --recursive exec -- rm -rf dist build .next .turbo",

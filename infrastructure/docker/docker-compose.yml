@@ -72,3 +72,4 @@ volumes:
 networks:
   bhuvi-network:
     driver: bridge
+

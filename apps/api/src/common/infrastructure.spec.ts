@@ -14,7 +14,8 @@ describe('Infrastructure Configuration & Sanitization Security', () => {
 
   describe('PostgreSQL Configuration Sanitization', () => {
     it('should parse database URL without leaking password in sanitized output', () => {
-      const url = 'postgresql://bhuvi_admin:SuperSecretPassword123!@db.internal.host:5432/bhuvi_prod?sslmode=require';
+      const url =
+        'postgresql://bhuvi_admin:SuperSecretPassword123!@db.internal.host:5432/bhuvi_prod?sslmode=require';
       const sanitized = parseSanitizedDatabaseConfig(url);
 
       expect(sanitized).toBeDefined();

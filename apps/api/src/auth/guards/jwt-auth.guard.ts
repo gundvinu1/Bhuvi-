@@ -8,11 +8,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return super.canActivate(context);
   }
 
-  override handleRequest<TUser = SafeUser>(
-    err: unknown,
-    user: TUser,
-    info: unknown,
-  ): TUser {
+  override handleRequest<TUser = SafeUser>(err: unknown, user: TUser, info: unknown): TUser {
     if (err) {
       if (err instanceof UnauthorizedException) {
         throw err;
@@ -35,4 +31,3 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return user;
   }
 }
-

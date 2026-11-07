@@ -16,4 +16,3 @@ Shared configuration utilities and schema validation for BHUVI.
 
 - `zod` – schema validation
 - `@bhuvi/shared` – shared types
-

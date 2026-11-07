@@ -32,7 +32,12 @@ describe('HealthController', () => {
   });
 
   it('GET /health should return real status with dependencies', async () => {
-    jest.spyOn(healthService as unknown as { checkRedisHealth: () => Promise<string> }, 'checkRedisHealth').mockResolvedValue('connected');
+    jest
+      .spyOn(
+        healthService as unknown as { checkRedisHealth: () => Promise<string> },
+        'checkRedisHealth',
+      )
+      .mockResolvedValue('connected');
 
     const result = await controller.getHealth();
     expect(result.application).toBe('BHUVI');
@@ -45,7 +50,12 @@ describe('HealthController', () => {
   });
 
   it('GET /health should report degraded when postgres is connected but redis is disconnected', async () => {
-    jest.spyOn(healthService as unknown as { checkRedisHealth: () => Promise<string> }, 'checkRedisHealth').mockResolvedValue('disconnected');
+    jest
+      .spyOn(
+        healthService as unknown as { checkRedisHealth: () => Promise<string> },
+        'checkRedisHealth',
+      )
+      .mockResolvedValue('disconnected');
 
     const result = await controller.getHealth();
     expect(result.status).toBe('degraded');

@@ -9,4 +9,3 @@ Personal knowledge graph and semantic memory
 ## Status
 
 📋 **Planned** – Not yet implemented.
-

@@ -58,18 +58,14 @@ describe('Auth Security Verification', () => {
       process.env['NODE_ENV'] = 'production';
       process.env['JWT_SECRET'] = 'short_insecure_secret';
 
-      expect(() => authConfig()).toThrow(
-        /at least 32 characters long in production/i,
-      );
+      expect(() => authConfig()).toThrow(/at least 32 characters long in production/i);
     });
 
     it('authConfig must throw error in production if JWT_SECRET contains insecure placeholder words', () => {
       process.env['NODE_ENV'] = 'production';
       process.env['JWT_SECRET'] = 'change_this_secret_value_for_production_use_1234';
 
-      expect(() => authConfig()).toThrow(
-        /Insecure or placeholder JWT_SECRET detected/i,
-      );
+      expect(() => authConfig()).toThrow(/Insecure or placeholder JWT_SECRET detected/i);
     });
 
     it('JwtStrategy must fail if auth.jwtSecret is not provided by ConfigService', () => {

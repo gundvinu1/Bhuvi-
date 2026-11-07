@@ -42,9 +42,7 @@ describe('Auth Cookie & Dual-Transport Integration', () => {
   let extractedToken: string;
 
   it('1. POST /api/v1/auth/register should set HttpOnly bhuvi_token cookie and return user payload', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/api/v1/auth/register')
-      .send(testUser);
+    const res = await request(app.getHttpServer()).post('/api/v1/auth/register').send(testUser);
 
     expect(res.status).toBe(HttpStatus.CREATED);
     expect(res.body.success).toBe(true);
@@ -90,8 +88,7 @@ describe('Auth Cookie & Dual-Transport Integration', () => {
   });
 
   it('4. GET /api/v1/auth/me should reject unauthenticated requests without credentials', async () => {
-    const res = await request(app.getHttpServer())
-      .get('/api/v1/auth/me');
+    const res = await request(app.getHttpServer()).get('/api/v1/auth/me');
 
     expect(res.status).toBe(HttpStatus.UNAUTHORIZED);
     expect(res.body.success).toBe(false);
@@ -115,12 +112,10 @@ describe('Auth Cookie & Dual-Transport Integration', () => {
   });
 
   it('6. POST /api/v1/auth/login should re-issue HttpOnly cookie upon valid credentials', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/api/v1/auth/login')
-      .send({
-        email: testUser.email,
-        password: testUser.password,
-      });
+    const res = await request(app.getHttpServer()).post('/api/v1/auth/login').send({
+      email: testUser.email,
+      password: testUser.password,
+    });
 
     expect(res.status).toBe(HttpStatus.OK);
     expect(res.body.success).toBe(true);

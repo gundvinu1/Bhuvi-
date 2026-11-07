@@ -54,7 +54,11 @@ describe('UsersService', () => {
   });
 
   it('toSafeUser should strictly strip passwordHash', async () => {
-    const user = await service.create('Vinayak', 'vinayak@example.com', '$2a$10$supersecretpasswordhash');
+    const user = await service.create(
+      'Vinayak',
+      'vinayak@example.com',
+      '$2a$10$supersecretpasswordhash',
+    );
     const safeUser = service.toSafeUser(user);
 
     const record = safeUser as unknown as Record<string, unknown>;

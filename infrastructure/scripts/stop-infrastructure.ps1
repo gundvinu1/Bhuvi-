@@ -15,3 +15,4 @@ Set-Location $composeDir
 Write-Host "Stopping PostgreSQL and Redis containers..." -ForegroundColor Yellow
 docker compose down
 Write-Host "Infrastructure stopped cleanly." -ForegroundColor Green
+

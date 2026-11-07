@@ -8,4 +8,3 @@ export default registerAs('app', () => ({
   port: parseInt(process.env['API_PORT'] ?? String(DEFAULT_PORTS.API), 10),
   corsOrigin: process.env['CORS_ORIGIN'] ?? 'http://localhost:3000',
 }));
-

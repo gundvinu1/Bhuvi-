@@ -20,12 +20,12 @@ None of the services below are required for Module 01 development.
 
 ## Planned Services
 
-| Service | Purpose | Module |
-|---------|---------|--------|
-| PostgreSQL 16 | Primary database | 03 |
-| Redis 7 | Cache & job queue | 03 |
-| Ollama | Local AI inference | 05 |
-| n8n | Workflow automation | 15 |
+| Service       | Purpose             | Module |
+| ------------- | ------------------- | ------ |
+| PostgreSQL 16 | Primary database    | 03     |
+| Redis 7       | Cache & job queue   | 03     |
+| Ollama        | Local AI inference  | 05     |
+| n8n           | Workflow automation | 15     |
 
 ## Quick Start (Future)
 
@@ -36,4 +36,3 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d
 # Check status
 docker compose -f infrastructure/docker/docker-compose.yml ps
 ```
-

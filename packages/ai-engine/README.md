@@ -9,4 +9,3 @@ Ollama integration and AI model management
 ## Status
 
 📋 **Planned** – Not yet implemented.
-

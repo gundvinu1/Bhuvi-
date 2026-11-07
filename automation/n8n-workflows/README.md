@@ -12,4 +12,3 @@ This directory will contain n8n workflow definitions for Module 15 (Action & Aut
 - Email triage and labeling
 - Calendar conflict detection
 - Scheduled memory consolidation
-

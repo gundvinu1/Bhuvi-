@@ -11,6 +11,7 @@ All subsequent modules (AI model orchestration, message ingestion, memory storag
 ## 2. Key Accomplishments
 
 ### 1. Dedicated Database Package (`@bhuvi/database`)
+
 - Implemented `packages/database` configured with Prisma ORM 5.22.
 - Created `schema.prisma` mapping the `User` model to PostgreSQL table `"users"`.
 - Created initial SQL migration `20261107000000_init_user`.
@@ -18,6 +19,7 @@ All subsequent modules (AI model orchestration, message ingestion, memory storag
 - Exported globally scoped `PrismaModule`.
 
 ### 2. Persistent User Repository (`PrismaUsersRepository`)
+
 - Implemented `PrismaUsersRepository` in `apps/api/src/users/prisma-users.repository.ts`.
 - Satisfies `IUsersRepository` contract.
 - Handles Prisma `P2002` unique constraint errors, mapping them to `ConflictException`.
@@ -25,18 +27,21 @@ All subsequent modules (AI model orchestration, message ingestion, memory storag
 - Integrated into `UsersModule` dependency injection for production and standard persistent execution.
 
 ### 3. Reusable Queue Foundation (`@bhuvi/queue`)
+
 - Created `packages/queue` wrapping **BullMQ** (v5) and **ioredis** (v5).
 - Standardized default queue name: `bhuvi-default`.
 - Defined `infrastructure-check` job contract (`InfrastructureCheckPayload`, `InfrastructureCheckResult`).
 - Sanitized Redis configuration parsing to prevent password leaks in telemetry and logs.
 
 ### 4. Worker Integration (`apps/worker`)
+
 - Enhanced `BhuviWorker` to initialize BullMQ worker listening on `bhuvi-default`.
 - Implemented handler for `infrastructure-check` jobs.
 - Implemented duplicate start prevention.
 - Added graceful shutdown handlers closing BullMQ worker and Redis connections.
 
 ### 5. Dependency-Aware Health Checks (`GET /api/v1/health`)
+
 - Extended `HealthService` and `HealthController` to probe real connectivity to:
   - `postgres`: Active roundtrip ping via `prismaService.isHealthy()`.
   - `redis`: Active ping with 1.5s timeout via `ioredis`.

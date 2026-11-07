@@ -32,6 +32,7 @@ BHUVI uses **Redis 7** as an in-memory data store for the **BullMQ** background 
 Because official Redis discontinued native Windows ports, Windows users can use:
 
 ### Sub-Option B1: WSL2 (Windows Subsystem for Linux)
+
 ```bash
 wsl --install
 sudo apt update && sudo apt install redis-server -y
@@ -41,6 +42,7 @@ redis-cli ping
 ```
 
 ### Sub-Option B2: Memurai for Windows
+
 Download and install Memurai (Redis-compatible Windows native service) from:  
 https://www.memurai.com/
 
@@ -50,6 +52,7 @@ https://www.memurai.com/
 
 BHUVI uses `@bhuvi/queue` which establishes connection using `ioredis`.
 When Redis is offline:
+
 - The API health check accurately reports:
   ```json
   {

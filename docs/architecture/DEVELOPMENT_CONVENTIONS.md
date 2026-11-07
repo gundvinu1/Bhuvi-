@@ -3,6 +3,7 @@
 ## Code Style
 
 ### TypeScript
+
 - **Strict mode** is enabled globally (`strict: true` in `tsconfig.base.json`)
 - No `any` types without explicit justification and `// eslint-disable` comment
 - Prefer `unknown` over `any` for external data
@@ -11,20 +12,22 @@
 
 ### Naming Conventions
 
-| Construct | Convention | Example |
-|-----------|-----------|---------|
-| Files | `kebab-case` | `health.service.ts` |
-| Classes | `PascalCase` | `HealthService` |
-| Interfaces | `PascalCase` with `I` optional | `ApiResponse` |
-| Type aliases | `PascalCase` | `HealthCheckResponse` |
-| Enums | `PascalCase` values | `BhuviErrorCode.NOT_FOUND` |
-| Functions | `camelCase` | `getHealth()` |
-| Variables | `camelCase` | `const startTime` |
-| Constants | `SCREAMING_SNAKE_CASE` | `APP_NAME` |
-| Environment vars | `SCREAMING_SNAKE_CASE` | `API_PORT` |
+| Construct        | Convention                     | Example                    |
+| ---------------- | ------------------------------ | -------------------------- |
+| Files            | `kebab-case`                   | `health.service.ts`        |
+| Classes          | `PascalCase`                   | `HealthService`            |
+| Interfaces       | `PascalCase` with `I` optional | `ApiResponse`              |
+| Type aliases     | `PascalCase`                   | `HealthCheckResponse`      |
+| Enums            | `PascalCase` values            | `BhuviErrorCode.NOT_FOUND` |
+| Functions        | `camelCase`                    | `getHealth()`              |
+| Variables        | `camelCase`                    | `const startTime`          |
+| Constants        | `SCREAMING_SNAKE_CASE`         | `APP_NAME`                 |
+| Environment vars | `SCREAMING_SNAKE_CASE`         | `API_PORT`                 |
 
 ### File Organization (NestJS)
+
 Each feature module follows:
+
 ```
 feature/
 ├── feature.module.ts
@@ -41,6 +44,7 @@ feature/
 ## Git Conventions
 
 ### Branch Naming
+
 ```
 feature/module-XX-short-description
 fix/short-description
@@ -49,6 +53,7 @@ chore/short-description
 ```
 
 ### Commit Messages (Conventional Commits)
+
 ```
 feat(module-01): add health check endpoint
 fix(api): handle missing environment variable gracefully
@@ -101,4 +106,3 @@ test(health): add controller unit tests
 - Log levels: `debug` | `log` | `warn` | `error`
 - Never log secrets, tokens, or personal data
 - Include context in every log entry
-

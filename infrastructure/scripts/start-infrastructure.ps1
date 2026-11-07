@@ -21,3 +21,4 @@ docker compose up -d
 
 Write-Host "Waiting for containers to be healthy..." -ForegroundColor Cyan
 docker compose ps
+

@@ -34,10 +34,10 @@ BHUVI/
 
 ### Prerequisites
 
-| Tool | Minimum Version | Reference |
-|------|-----------------|-----------|
-| Node.js | >= 20.0.0 | [nodejs.org](https://nodejs.org) |
-| pnpm | >= 9.0.0 | [pnpm.io](https://pnpm.io) |
+| Tool                      | Minimum Version         | Reference                            |
+| ------------------------- | ----------------------- | ------------------------------------ |
+| Node.js                   | >= 20.0.0               | [nodejs.org](https://nodejs.org)     |
+| pnpm                      | >= 9.0.0                | [pnpm.io](https://pnpm.io)           |
 | Docker Desktop (Optional) | PostgreSQL 16 & Redis 7 | [docker.com](https://www.docker.com) |
 
 ### Setup

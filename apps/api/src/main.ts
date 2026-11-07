@@ -35,7 +35,9 @@ async function bootstrap(): Promise<void> {
   const port = parseInt(process.env['API_PORT'] ?? '3001', 10);
   await app.listen(port);
 
-  logger.log(`🚀 ${APP_NAME} API v${APP_VERSION} is running on http://localhost:${port}${API_PREFIX}`);
+  logger.log(
+    `🚀 ${APP_NAME} API v${APP_VERSION} is running on http://localhost:${port}${API_PREFIX}`,
+  );
 }
 
 void bootstrap();

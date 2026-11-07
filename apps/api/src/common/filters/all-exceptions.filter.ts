@@ -19,17 +19,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
 
     const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     let message =
-      exception instanceof HttpException
-        ? exception.message
-        : 'An unexpected error occurred';
+      exception instanceof HttpException ? exception.message : 'An unexpected error occurred';
 
-    const rawResponse =
-      exception instanceof HttpException ? exception.getResponse() : undefined;
+    const rawResponse = exception instanceof HttpException ? exception.getResponse() : undefined;
 
     let details: unknown = rawResponse;
 

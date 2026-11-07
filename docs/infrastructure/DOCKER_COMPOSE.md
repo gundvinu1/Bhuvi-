@@ -5,6 +5,7 @@
 The local infrastructure stack is located at `infrastructure/docker/docker-compose.yml`.
 
 Services included:
+
 1. **`postgres`:** PostgreSQL 16 Alpine container with persistent volume and healthcheck.
 2. **`redis`:** Redis 7 Alpine container with persistent volume and healthcheck.
 
@@ -37,6 +38,7 @@ docker compose down
 ```
 
 To stop and remove persistent database volumes (reset data):
+
 ```powershell
 docker compose down -v
 ```
@@ -53,6 +55,7 @@ docker compose ps
 ```
 
 Expected healthy output:
+
 ```
 NAME             IMAGE               STATUS                    PORTS
 bhuvi-postgres   postgres:16-alpine  Up (healthy) 5432->5432   0.0.0.0:5432->5432/tcp

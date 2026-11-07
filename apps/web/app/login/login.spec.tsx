@@ -20,7 +20,8 @@ describe('LoginPage', () => {
   });
 
   it('submits with credentials: "include" and does NOT store tokens in sessionStorage or localStorage', async () => {
-    const mockFetch = jest.fn()
+    const mockFetch = jest
+      .fn()
       // First call: POST /api/v1/auth/login
       .mockResolvedValueOnce({
         ok: true,

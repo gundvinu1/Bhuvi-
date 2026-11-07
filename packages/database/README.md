@@ -9,4 +9,3 @@ Prisma client, migrations, and seed scripts
 ## Status
 
 📋 **Planned** – Not yet implemented.
-

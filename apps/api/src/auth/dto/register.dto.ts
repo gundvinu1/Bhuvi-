@@ -27,4 +27,3 @@ export class RegisterDto implements RegisterRequest {
   })
   password!: string;
 }
-

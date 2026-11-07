@@ -57,6 +57,7 @@ export interface IUsersRepository {
 ### Development Adapter (`InMemoryUsersRepository`)
 
 For Module 02 local development and automated testing:
+
 - Uses an in-memory `Map<string, User>`.
 - **Strictly Non-Production:** Checks `process.env.NODE_ENV === 'production'` upon instantiation and throws a fatal error if executed in production.
 - Logs a prominent warning at startup explaining that data is non-persistent.
@@ -65,6 +66,7 @@ For Module 02 local development and automated testing:
 ### How Module 03 Replaces It
 
 When Module 03 (Database & Infrastructure) is activated:
+
 1. PostgreSQL container and Prisma client will be configured.
 2. A `PrismaUsersRepository` implementing `IUsersRepository` will be created in `@bhuvi/database`.
 3. In `apps/api/src/users/users.module.ts`, the provider binding will switch:
@@ -113,17 +115,18 @@ When Module 03 (Database & Infrastructure) is activated:
 
 ## 5. Environment Configuration
 
-| Variable | Development Default | Production Requirement | Description |
-|---|---|---|---|
-| `JWT_SECRET` | Default testing key | **Required** (min 32 chars) | Cryptographic secret for signing JWTs |
-| `JWT_ACCESS_TOKEN_EXPIRY` | `15m` | `15m` (configurable) | Access token lifetime |
-| `AUTH_DEV_MODE` | `true` | `false` | Enables in-memory test adapter in development |
+| Variable                  | Development Default | Production Requirement      | Description                                   |
+| ------------------------- | ------------------- | --------------------------- | --------------------------------------------- |
+| `JWT_SECRET`              | Default testing key | **Required** (min 32 chars) | Cryptographic secret for signing JWTs         |
+| `JWT_ACCESS_TOKEN_EXPIRY` | `15m`               | `15m` (configurable)        | Access token lifetime                         |
+| `AUTH_DEV_MODE`           | `true`              | `false`                     | Enables in-memory test adapter in development |
 
 ---
 
 ## 6. Security Hardening & Audit Verification
 
 As of the Module 02 Security Audit:
+
 - **HttpOnly Cookie Transport:** Access tokens are delivered via `HttpOnly`, `SameSite=Lax` (Strict in production), `Path=/` cookies (`bhuvi_token`). Client-side storage (`localStorage`/`sessionStorage`) is completely bypassed, eliminating client-side XSS token theft vectors.
 - **Rate Limiting:** Auth endpoints (`/auth/login`, `/auth/register`) are protected by `@nestjs/throttler` (max 5 requests/min per IP), responding with HTTP 429 `RATE_LIMIT_EXCEEDED` on breach.
 - **Secret Hardening:** Production environment strictly requires a 32+ character non-placeholder `JWT_SECRET`. Missing or default secrets prevent application startup.
@@ -136,4 +139,3 @@ As of the Module 02 Security Audit:
 - **Persistent Storage:** Registration and login data are held in memory during development and reset on application restart. Module 03 will integrate PostgreSQL and Prisma ORM to provide persistent storage.
 - **Refresh Tokens:** Refresh token rotation with family revocation will be introduced post-database integration in Module 03/04.
 - **Multi-Factor Authentication (MFA):** Optional TOTP integration is scheduled for Module 18 (Security, Monitoring & Deployment).
-

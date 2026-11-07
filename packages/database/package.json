@@ -19,11 +19,11 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "clean": "rimraf dist",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio",
-    "db:push": "prisma db push"
+    "db:generate": "dotenv -e ../../.env -- prisma generate",
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
+    "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
+    "db:studio": "dotenv -e ../../.env -- prisma studio",
+    "db:push": "dotenv -e ../../.env -- prisma db push"
   },
   "dependencies": {
     "@bhuvi/shared": "workspace:*",
@@ -34,6 +34,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "dotenv-cli": "^11.1.0",
     "prisma": "^5.22.0",
     "rimraf": "^6.0.0",
     "typescript": "^5.5.0"

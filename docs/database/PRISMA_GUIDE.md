@@ -46,6 +46,7 @@ export class ExampleRepository {
 ## 3. Connection Lifecycle & Graceful Shutdown
 
 `PrismaService` implements:
+
 - `OnModuleInit`: Executes `$connect()` during NestJS bootstrap.
 - `OnModuleDestroy`: Executes `$disconnect()` during application termination.
 - `isHealthy()`: Pings PostgreSQL (`SELECT 1`) to measure latency and confirm active connectivity without leaking secrets.
@@ -55,6 +56,7 @@ export class ExampleRepository {
 ## 4. Query Logging Conventions
 
 In development (`NODE_ENV=development`), `PrismaService` enables structured query and error logging:
+
 - Query events are emitted at `debug` level.
 - Warnings and errors are captured via the standard NestJS logger.
-In production, only error logs are output to prevent sensitive queries from entering production logs.
+  In production, only error logs are output to prevent sensitive queries from entering production logs.
