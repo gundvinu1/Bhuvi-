@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   BadRequestException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService, Prisma } from '@bhuvi/database';
 import { AgentRole } from '@bhuvi/shared';
@@ -13,7 +14,7 @@ import { StepPreviousOutput } from '../agents/base-agent.interface';
 import { ExecutionSummary } from './execution.types';
 
 @Injectable()
-export class ExecutionEngineService {
+export class ExecutionEngineService implements OnModuleInit {
   private readonly logger = new Logger(ExecutionEngineService.name);
   private activeExecutions = new Set<string>();
 
@@ -24,36 +25,77 @@ export class ExecutionEngineService {
   ) {}
 
   /**
+   * Recovers from previous server crashes or restarts by resetting orphaned RUNNING plans.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      const recovered = await this.prisma.agentPlan.updateMany({
+        where: { status: 'RUNNING' },
+        data: { status: 'FAILED' },
+      });
+
+      if (recovered.count > 0) {
+        this.logger.warn(
+          `Startup recovery: marked ${recovered.count} orphaned RUNNING plan(s) as FAILED`,
+        );
+
+        await this.prisma.agentPlanStep.updateMany({
+          where: { status: 'RUNNING' },
+          data: { status: 'FAILED', error: 'Execution interrupted by server restart' },
+        });
+
+        await this.prisma.agentExecution.updateMany({
+          where: { status: 'RUNNING' },
+          data: {
+            status: 'FAILED',
+            error: 'Execution interrupted by server restart',
+            completedAt: new Date(),
+          },
+        });
+      }
+    } catch (err: unknown) {
+      this.logger.error(
+        'Startup recovery check failed:',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
+  /**
    * Starts or resumes controlled execution of an agent plan.
    * Enforces ownership, duplicate execution prevention, and dependency resolution.
    */
   async executePlan(planId: string, userId: string): Promise<ExecutionSummary> {
-    const plan = await this.prisma.agentPlan.findUnique({
-      where: { id: planId },
-      include: {
-        steps: { orderBy: { stepIndex: 'asc' } },
-        approvals: true,
+    // Atomic status transition in PostgreSQL prevents simultaneous execution across multiple API instances
+    const atomicClaim = await this.prisma.agentPlan.updateMany({
+      where: {
+        id: planId,
+        userId,
+        status: { in: ['PENDING', 'WAITING_FOR_APPROVAL', 'FAILED', 'READY'] },
+      },
+      data: {
+        status: 'RUNNING',
       },
     });
 
-    if (!plan) {
-      throw new NotFoundException(`Plan with ID "${planId}" not found`);
-    }
-
-    if (plan.userId !== userId) {
-      throw new ForbiddenException('You do not have permission to execute this plan');
-    }
-
-    if (plan.status === 'RUNNING' || this.activeExecutions.has(planId)) {
-      throw new BadRequestException('Plan is already actively running');
-    }
-
-    if (plan.status === 'COMPLETED') {
-      throw new BadRequestException('Plan is already completed');
-    }
-
-    if (plan.status === 'CANCELLED') {
-      throw new BadRequestException('Cannot execute a cancelled plan');
+    if (atomicClaim.count === 0) {
+      const existing = await this.prisma.agentPlan.findUnique({ where: { id: planId } });
+      if (!existing) {
+        throw new NotFoundException(`Plan with ID "${planId}" not found`);
+      }
+      if (existing.userId !== userId) {
+        throw new ForbiddenException('You do not have permission to execute this plan');
+      }
+      if (existing.status === 'RUNNING' || this.activeExecutions.has(planId)) {
+        throw new BadRequestException('Plan is already actively running');
+      }
+      if (existing.status === 'COMPLETED') {
+        throw new BadRequestException('Plan is already completed');
+      }
+      if (existing.status === 'CANCELLED') {
+        throw new BadRequestException('Cannot execute a cancelled plan');
+      }
+      throw new BadRequestException(`Cannot execute plan in status "${existing.status}"`);
     }
 
     this.activeExecutions.add(planId);
@@ -67,11 +109,6 @@ export class ExecutionEngineService {
       },
     });
 
-    await this.prisma.agentPlan.update({
-      where: { id: planId },
-      data: { status: 'RUNNING' },
-    });
-
     this.logger.log(`Starting execution run [${execution.id}] for plan [${planId}]`);
 
     try {
@@ -80,7 +117,7 @@ export class ExecutionEngineService {
       await this.prisma.agentExecution.update({
         where: { id: execution.id },
         data: {
-          status: summary.status === 'RUNNING' ? 'COMPLETED' : summary.status,
+          status: summary.status,
           completedAt: new Date(),
           error: summary.error,
         },
@@ -316,6 +353,21 @@ export class ExecutionEngineService {
         summary: result.summary,
         details: result.details,
       });
+    }
+
+    // Verify plan was not cancelled while steps were running
+    const currentPlan = await this.prisma.agentPlan.findUnique({
+      where: { id: planId },
+      select: { status: true },
+    });
+    if (currentPlan?.status === 'CANCELLED') {
+      return {
+        planId,
+        executionId,
+        status: 'CANCELLED',
+        completedSteps: completedCount,
+        totalSteps,
+      };
     }
 
     const allDone = completedCount === totalSteps;

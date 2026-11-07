@@ -201,13 +201,14 @@ export class PlannerService {
     // 1. Validate that all referenced dependencies exist and are not self-referential
     for (const step of steps) {
       for (const dep of step.dependencies) {
-        if (!stepKeys.has(dep)) {
-          // Clean invalid reference rather than hard crash
-          step.dependencies = step.dependencies.filter((d) => stepKeys.has(d));
-        }
         if (dep === step.stepKey) {
           throw new BadRequestException(
             `Step "${step.stepKey}" has a self-dependency, which is invalid.`,
+          );
+        }
+        if (!stepKeys.has(dep)) {
+          throw new BadRequestException(
+            `Step "${step.stepKey}" references non-existent dependency "${dep}".`,
           );
         }
       }
@@ -242,17 +243,9 @@ export class PlannerService {
     for (const stepKey of stepKeys) {
       if (!visited.has(stepKey)) {
         if (hasCycle(stepKey)) {
-          this.logger.warn(
-            `Circular dependency detected in plan steps. Resolving to linear order.`,
+          throw new BadRequestException(
+            `Circular dependency detected in plan steps involving "${stepKey}". Invalid execution graph.`,
           );
-          // Remove cycle by resetting dependencies to clean sequential order
-          for (let i = 0; i < steps.length; i++) {
-            const current = steps[i];
-            if (current) {
-              current.dependencies = i === 0 ? [] : [steps[i - 1]!.stepKey];
-            }
-          }
-          break;
         }
       }
     }

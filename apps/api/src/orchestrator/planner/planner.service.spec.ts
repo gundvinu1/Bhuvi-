@@ -96,7 +96,7 @@ describe('PlannerService', () => {
     expect(plan.steps.length).toBeLessThanOrEqual(10);
   });
 
-  it('detects and resolves circular dependencies into linear order', () => {
+  it('rejects circular dependencies with BadRequestException (does not silently linearize)', () => {
     const circularSteps = [
       {
         stepKey: 'step-1',
@@ -118,11 +118,38 @@ describe('PlannerService', () => {
       },
     ];
 
-    service.validatePlanStructure(circularSteps);
+    expect(() => service.validatePlanStructure(circularSteps)).toThrow(BadRequestException);
+    expect(() => service.validatePlanStructure(circularSteps)).toThrow(
+      /Circular dependency detected in plan steps/i,
+    );
+  });
 
-    // After resolution, step-1 has no dependencies and step-2 depends on step-1
-    expect(circularSteps[0]?.dependencies).toEqual([]);
-    expect(circularSteps[1]?.dependencies).toEqual(['step-1']);
+  it('rejects missing dependency references with BadRequestException', () => {
+    const missingDepSteps = [
+      {
+        stepKey: 'step-1',
+        stepIndex: 1,
+        title: 'Step 1',
+        description: 'Desc 1',
+        assignedAgent: 'PLANNING' as const,
+        dependencies: [],
+        requiresApproval: false,
+      },
+      {
+        stepKey: 'step-2',
+        stepIndex: 2,
+        title: 'Step 2',
+        description: 'Desc 2',
+        assignedAgent: 'RESEARCH' as const,
+        dependencies: ['non-existent-step'], // Missing dependency
+        requiresApproval: false,
+      },
+    ];
+
+    expect(() => service.validatePlanStructure(missingDepSteps)).toThrow(BadRequestException);
+    expect(() => service.validatePlanStructure(missingDepSteps)).toThrow(
+      /references non-existent dependency/i,
+    );
   });
 
   it('rejects self-dependent steps with BadRequestException', () => {
@@ -139,6 +166,41 @@ describe('PlannerService', () => {
     ];
 
     expect(() => service.validatePlanStructure(selfDepSteps)).toThrow(BadRequestException);
+    expect(() => service.validatePlanStructure(selfDepSteps)).toThrow(/self-dependency/i);
+  });
+
+  it('accepts valid acyclic dependency graphs (DAG) in correct execution order', () => {
+    const validDagSteps = [
+      {
+        stepKey: 'step-1',
+        stepIndex: 1,
+        title: 'Step 1',
+        description: 'Desc 1',
+        assignedAgent: 'PLANNING' as const,
+        dependencies: [],
+        requiresApproval: false,
+      },
+      {
+        stepKey: 'step-2',
+        stepIndex: 2,
+        title: 'Step 2',
+        description: 'Desc 2',
+        assignedAgent: 'RESEARCH' as const,
+        dependencies: ['step-1'],
+        requiresApproval: false,
+      },
+      {
+        stepKey: 'step-3',
+        stepIndex: 3,
+        title: 'Step 3',
+        description: 'Desc 3',
+        assignedAgent: 'TASK' as const,
+        dependencies: ['step-1', 'step-2'],
+        requiresApproval: false,
+      },
+    ];
+
+    expect(() => service.validatePlanStructure(validDagSteps)).not.toThrow();
   });
 
   it('produces deterministic fallback plan when Ollama fails', async () => {

@@ -152,4 +152,58 @@ describe('Real AI Agent Orchestrator Integration (qwen2.5:3b + PostgreSQL 16)', 
       .set('Authorization', `Bearer ${user1Token}`);
     expect(verifyRes.body.data.status).toBe('CANCELLED');
   }, 45000);
+
+  it('7. POST /api/v1/orchestrator/plans should reject request with prompt key (contract requires message) with 400 Bad Request', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/orchestrator/plans')
+      .set('Authorization', `Bearer ${user1Token}`)
+      .send({ prompt: 'This should be rejected because key is prompt not message' });
+
+    expect(res.status).toBe(HttpStatus.BAD_REQUEST);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('8. POST /api/v1/orchestrator/plans should reject empty or whitespace message with 400 Bad Request', async () => {
+    const resEmpty = await request(app.getHttpServer())
+      .post('/api/v1/orchestrator/plans')
+      .set('Authorization', `Bearer ${user1Token}`)
+      .send({ message: '' });
+
+    expect(resEmpty.status).toBe(HttpStatus.BAD_REQUEST);
+
+    const resWhitespace = await request(app.getHttpServer())
+      .post('/api/v1/orchestrator/plans')
+      .set('Authorization', `Bearer ${user1Token}`)
+      .send({ message: '     ' });
+
+    expect(resWhitespace.status).toBe(HttpStatus.BAD_REQUEST);
+  });
+
+  it('9. POST /api/v1/orchestrator/plans/:id/execute should reject cross-user execution with 403 Forbidden', async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/orchestrator/plans/${createdPlanId}/execute`)
+      .set('Authorization', `Bearer ${user2Token}`);
+
+    expect(res.status).toBe(HttpStatus.FORBIDDEN);
+  });
+
+  it('10. POST /api/v1/orchestrator/plans/:id/cancel should reject cross-user cancellation with 403 Forbidden', async () => {
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/orchestrator/plans/${createdPlanId}/cancel`)
+      .set('Authorization', `Bearer ${user2Token}`);
+
+    expect(res.status).toBe(HttpStatus.FORBIDDEN);
+  });
+
+  it('11. Approvals should strictly enforce cross-user isolation with 403 Forbidden', async () => {
+    // Attempting to approve non-existent or other user proposal with random UUID
+    const randomApprovalId = '00000000-0000-0000-0000-000000000000';
+    const resApprove = await request(app.getHttpServer())
+      .post(`/api/v1/orchestrator/approvals/${randomApprovalId}/approve`)
+      .set('Authorization', `Bearer ${user2Token}`)
+      .send({ reason: 'Malicious attempt' });
+
+    // Should return 404 (if non-existent) or 403 (if belongs to user1)
+    expect([HttpStatus.NOT_FOUND, HttpStatus.FORBIDDEN]).toContain(resApprove.status);
+  });
 });

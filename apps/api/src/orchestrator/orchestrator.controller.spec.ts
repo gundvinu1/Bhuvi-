@@ -62,6 +62,51 @@ describe('OrchestratorController', () => {
       expect(res.data.id).toBe('plan-1');
       expect(service.createPlan).toHaveBeenCalledWith(mockUser.id, dto.message);
     });
+
+    it('validates CreatePlanDto with ValidationPipe: accepts valid message', async () => {
+      const target = new ValidationPipe({ whitelist: true, transform: true });
+      const metadata: ArgumentMetadata = { type: 'body', metatype: CreatePlanDto };
+
+      const validObj = { message: 'Help me prepare for tomorrow meeting' };
+      const result = await target.transform(validObj, metadata);
+      expect(result.message).toBe('Help me prepare for tomorrow meeting');
+    });
+
+    it('validates CreatePlanDto with ValidationPipe: rejects missing message or prompt key', async () => {
+      const target = new ValidationPipe({ whitelist: true, transform: true });
+      const metadata: ArgumentMetadata = { type: 'body', metatype: CreatePlanDto };
+
+      // Inconsistent contract with "prompt" instead of "message"
+      const invalidPromptObj = { prompt: 'Help me prepare for tomorrow meeting' };
+      await expect(target.transform(invalidPromptObj, metadata)).rejects.toThrow(
+        BadRequestException,
+      );
+
+      // Missing message entirely
+      await expect(target.transform({}, metadata)).rejects.toThrow(BadRequestException);
+    });
+
+    it('validates CreatePlanDto with ValidationPipe: rejects empty or whitespace-only message', async () => {
+      const target = new ValidationPipe({ whitelist: true, transform: true });
+      const metadata: ArgumentMetadata = { type: 'body', metatype: CreatePlanDto };
+
+      await expect(target.transform({ message: '' }, metadata)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(target.transform({ message: '   ' }, metadata)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('validates CreatePlanDto with ValidationPipe: rejects message exceeding 4000 characters', async () => {
+      const target = new ValidationPipe({ whitelist: true, transform: true });
+      const metadata: ArgumentMetadata = { type: 'body', metatype: CreatePlanDto };
+
+      const longMessage = 'a'.repeat(4001);
+      await expect(target.transform({ message: longMessage }, metadata)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
   });
 
   describe('GET /plans (listPlans)', () => {

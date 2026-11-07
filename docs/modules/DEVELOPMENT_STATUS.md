@@ -123,9 +123,9 @@ pnpm test          → PASS (25 suites, 130 tests passed across monorepo)
 | Agent boundary enforcement | ✅ | Read-only research, message proposals only (no external sending), task checklists only (no calendar edits), dynamic agent prevention |
 | Intent categorization into 7 classes | ✅ | `IntentAnalyzerService` with strict JSON parsing and deterministic keyword fallback |
 | Task decomposition with max 10 steps | ✅ | `PlannerService` generates structured plans, caps steps at 10, assigns agents |
-| Step dependency tracking & cycle resolution | ✅ | DFS cycle detection in `PlannerService`, auto-linearizes cyclic graphs to avoid deadlocks |
+| Step dependency tracking & cycle validation | ✅ | DFS cycle detection in `PlannerService`, strictly rejects cyclic, missing, and self dependencies with `BadRequestException` (no silent linearization) |
 | Sequential execution engine | ✅ | `ExecutionEngineService` executes steps sequentially, captures outputs, enforces dependencies |
-| Duplicate execution prevention | ✅ | In-memory lock prevents concurrent duplicate executions of the same plan (`ConflictException`) |
+| Multi-instance concurrency & duplicate prevention | ✅ | PostgreSQL atomic conditional update prevents multi-instance duplicate execution, with startup recovery for interrupted plans |
 | Human approval boundary & ownership | ✅ | `ApprovalService` manages `PENDING` -> `APPROVED`/`REJECTED`. Strict user ownership enforcement (HTTP 403) |
 | Database persistence with Prisma | ✅ | Migration `20261107090648_add_agent_orchestrator_models` adds `AgentPlan`, `AgentPlanStep`, `AgentExecution`, `ApprovalRequest` |
 | Authenticated REST API | ✅ | `/api/v1/orchestrator` (`POST /plans`, `GET /plans`, `GET /plans/:id`, `POST /plans/:id/execute`, `POST /plans/:id/cancel`, `GET /approvals`, `POST /approvals/:id/approve`, `POST /approvals/:id/reject`) |

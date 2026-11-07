@@ -136,6 +136,17 @@ describe('ApprovalService', () => {
     await expect(service.approve('appr-1', 'usr-ATTACKER')).rejects.toThrow(ForbiddenException);
   });
 
+  it('throws ForbiddenException if a user attempts to reject another user proposal', async () => {
+    mockPrisma.approvalRequest.findUnique.mockResolvedValue({
+      id: 'appr-1',
+      planId: 'plan-1',
+      userId: 'usr-OWNER',
+      status: 'PENDING',
+    });
+
+    await expect(service.reject('appr-1', 'usr-ATTACKER')).rejects.toThrow(ForbiddenException);
+  });
+
   it('throws BadRequestException if proposal is not PENDING', async () => {
     mockPrisma.approvalRequest.findUnique.mockResolvedValue({
       id: 'appr-1',

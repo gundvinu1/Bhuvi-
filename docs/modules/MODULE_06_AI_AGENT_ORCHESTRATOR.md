@@ -6,7 +6,7 @@ Module 06 establishes the **AI Agent Orchestrator** for BHUVI (Brain for Human V
 
 The orchestrator decomposes complex natural language goals into sequential execution plans, assigns tasks to 4 specialized logical agents, manages step dependencies and error handling, enforces human approval boundaries for sensitive actions, and tracks execution state persistently in PostgreSQL with BullMQ worker compatibility.
 
-All orchestration capabilities run strictly on local hardware (Intel i5-13420H, RTX 4050 6GB, 16GB RAM) without paid third-party APIs, internet data scraping, dynamic code execution, or unconstrained autonomous actions.
+All orchestration capabilities run strictly on local hardware (AMD Ryzen 7 7445HS, NVIDIA GeForce RTX 4050 Laptop GPU, 16GB RAM, ASUS TUF A16) without paid third-party APIs, internet data scraping, dynamic code execution, or unconstrained autonomous actions.
 
 ---
 
@@ -152,9 +152,12 @@ The `PlannerService` transforms user intent and prompt context into an actionabl
 - **Step Cap Enforcement:** Plans are capped at a maximum of 10 steps to prevent unbounded computation and context window overflow.
 - **Role Assignment:** Each step is assigned to one of the 4 valid logical agents.
 - **Dependency Tracking:** Steps declare explicit dependencies on earlier step keys (e.g., `["step_1"]`).
-- **Topological Sort & Circular Dependency Resolution:**
-  - Cycle detection using depth-first search (DFS).
-  - If a cycle is detected (e.g. `step_1 -> step_2 -> step_1`), the planner logs a warning and automatically sanitizes the plan into a strictly sequential execution order (`step_1 -> step_2 -> step_3`), eliminating the loop safely.
+- **Strict Topological Validation & Cycle Rejection:**
+  - Cycle detection using depth-first search (DFS) with recursion stack tracking.
+  - **Controlled Error Rejection:** If a cyclic dependency is detected (e.g. `step_1 -> step_2 -> step_1`), `PlannerService.validatePlanStructure` rejects it immediately with a controlled `BadRequestException`. The engine **never silently linearizes or rewrites invalid dependency graphs**.
+  - **Missing Reference Rejection:** Referencing any undefined step key throws a controlled `BadRequestException`.
+  - **Self-Dependency Rejection:** A step referencing itself throws a controlled `BadRequestException`.
+  - **Valid DAG Execution:** Acyclic dependency graphs pass validation and execute in verified topological order.
 
 ---
 
@@ -162,7 +165,13 @@ The `PlannerService` transforms user intent and prompt context into an actionabl
 
 The `ExecutionEngineService` coordinates step-by-step agent execution:
 
-- **Duplicate Execution Prevention:** In-memory lock prevents concurrent duplicate executions of the same plan (`ConflictException: Plan is already executing`).
+- **Atomic Concurrency Protection:** Execution claims are committed atomically in PostgreSQL via conditional updates (`updateMany` with `status: { in: ['PENDING', 'WAITING_FOR_APPROVAL', 'FAILED', 'READY'] }`), preventing simultaneous execution across multiple API instances. Duplicate concurrent execution requests receive `HTTP 400 BadRequestException: Plan is already actively running`.
+- **In-Memory Fast Fail:** An in-process `activeExecutions` Set provides instant duplicate rejection within a single process.
+- **Server Restart & Crash Recovery:** `ExecutionEngineService` implements NestJS `OnModuleInit` to detect and recover orphaned `RUNNING` records on system boot, marking them as `FAILED` with an explanatory audit error.
+- **Cancellation Guarantee:** Active plan cancellation is verified before each step and at completion; `CANCELLED` status cannot be overwritten by `COMPLETED` or `RUNNING`.
+- **Sequential Execution:** Steps are executed in topological order. A step runs only when all prerequisite dependencies have status `COMPLETED`.
+- **Human Approval Gate:** When a step requires approval (`requiresApproval: true`), the execution engine creates an `ApprovalRequest` record with status `PENDING`, sets the step to `WAITING_FOR_APPROVAL`, sets the plan to `WAITING_FOR_APPROVAL`, and halts until human resolution.
+- **Step Output Chaining:** Completed step outputs (summaries, details, extracted data) are accumulated and fed into downstream step contexts as `previousOutputs`.
 - **User Ownership Validation:** Verifies the requesting user owns the plan before starting (`ForbiddenException`).
 - **Sequential Execution:** Steps are executed in topological order. A step runs only when all prerequisite dependencies have status `COMPLETED`.
 - **Human Approval Gate:** When a step requires approval (`requiresApproval: true`), the execution engine creates an `ApprovalRequest` record with status `PENDING`, sets the step to `WAITING_FOR_APPROVAL`, sets the plan to `WAITING_FOR_APPROVAL`, and halts until human resolution.
@@ -244,16 +253,16 @@ Prisma migration `20261107090648_add_agent_orchestrator_models` applies four nor
 
 All endpoints reside under `/api/v1/orchestrator` and require JWT authentication (HttpOnly cookie or Bearer token):
 
-| Method | Endpoint                                     | Description                                                          |
-| ------ | -------------------------------------------- | -------------------------------------------------------------------- |
-| `POST` | `/api/v1/orchestrator/plans`                 | Analyzes intent, creates a structured execution plan, persists to DB |
-| `GET`  | `/api/v1/orchestrator/plans`                 | Lists paginated plans for the authenticated user                     |
-| `GET`  | `/api/v1/orchestrator/plans/:id`             | Retrieves single plan with steps and approval details                |
-| `POST` | `/api/v1/orchestrator/plans/:id/execute`     | Executes plan steps sequentially with dependency resolution          |
-| `POST` | `/api/v1/orchestrator/plans/:id/cancel`      | Cancels an active or waiting plan                                    |
-| `GET`  | `/api/v1/orchestrator/approvals`             | Lists pending approval requests for the authenticated user           |
-| `POST` | `/api/v1/orchestrator/approvals/:id/approve` | Human user approves a sensitive proposal                             |
-| `POST` | `/api/v1/orchestrator/approvals/:id/reject`  | Human user rejects a proposal with optional reason                   |
+| Method | Endpoint                                     | Request Body            | Response Meta / Data                            | Description                                                          |
+| ------ | -------------------------------------------- | ----------------------- | ----------------------------------------------- | -------------------------------------------------------------------- |
+| `POST` | `/api/v1/orchestrator/plans`                 | `{ "message": string }` | `AgentPlanDto`                                  | Analyzes intent, creates a structured execution plan, persists to DB |
+| `GET`  | `/api/v1/orchestrator/plans`                 | Query: `page`, `limit`  | `{ items: AgentPlanDto[], total, page, limit }` | Lists paginated plans for the authenticated user                     |
+| `GET`  | `/api/v1/orchestrator/plans/:id`             | None                    | `AgentPlanDto`                                  | Retrieves single plan with steps and approval details                |
+| `POST` | `/api/v1/orchestrator/plans/:id/execute`     | None                    | `ExecutePlanResponse`                           | Executes plan steps sequentially with dependency resolution          |
+| `POST` | `/api/v1/orchestrator/plans/:id/cancel`      | None                    | `AgentPlanDto`                                  | Cancels an active or waiting plan                                    |
+| `GET`  | `/api/v1/orchestrator/approvals`             | None                    | `ApprovalRequestDto[]`                          | Lists pending approval requests for the authenticated user           |
+| `POST` | `/api/v1/orchestrator/approvals/:id/approve` | `{ "reason"?: string }` | `ApprovalRequestDto`                            | Human user approves a sensitive proposal                             |
+| `POST` | `/api/v1/orchestrator/approvals/:id/reject`  | `{ "reason"?: string }` | `ApprovalRequestDto`                            | Human user rejects a proposal with optional reason                   |
 
 ---
 
@@ -271,10 +280,11 @@ The Next.js 14 frontend provides a responsive orchestration console:
 
 ---
 
-## 11. Background Worker Integration (`apps/worker`)
+## 11. Background Worker & Execution Architecture
 
-- **BullMQ Integration:** Registered `JOB_EXECUTE_PLAN` (`execute-plan`) in `packages/queue`.
-- **Worker Processor:** `apps/worker/src/main.ts` processes `execute-plan` jobs, tracking plan execution state and logging step transitions.
+- **API Execution Pipeline:** In Module 06, plan execution triggered via `POST /api/v1/orchestrator/plans/:id/execute` runs directly in-process via `ExecutionEngineService`. This ensures deterministic, synchronous step execution and immediate status reporting without requiring an external worker process.
+- **Worker Queue Infrastructure:** Registered `JOB_EXECUTE_PLAN` (`execute-plan`) in `packages/queue` and implemented processor in `apps/worker/src/main.ts` for asynchronous worker consumption.
+- **Concurrency & Locking:** We do **not** claim distributed Redlock. Instead, multi-instance concurrency safety is achieved natively via PostgreSQL atomic conditional updates (`updateMany` with `status: { in: ['PENDING', 'WAITING_FOR_APPROVAL', 'FAILED', 'READY'] }`), combined with an in-process execution Set for fast local rejection.
 - **Worker Test Suite:** `apps/worker/src/main.spec.ts` verifies valid job handling and graceful unknown job skips.
 
 ---
