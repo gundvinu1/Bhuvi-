@@ -21,6 +21,25 @@ jest.mock('../../lib/auth-context', () => {
   };
 });
 
+jest.mock('../../lib/use-ai', () => ({
+  useAi: () => ({
+    status: {
+      provider: 'ollama',
+      status: 'connected',
+      model: 'qwen2.5:3b',
+      modelAvailable: true,
+    },
+    isStatusLoading: false,
+    statusError: null,
+    messages: [],
+    isLoading: false,
+    error: null,
+    sendMessage: jest.fn(),
+    clearChat: jest.fn(),
+    refreshStatus: jest.fn(),
+  }),
+}));
+
 import { useAuth } from '../../lib/auth-context';
 import DashboardOverviewPage from './page';
 import DashboardLayout from './layout';
@@ -85,16 +104,12 @@ describe('DashboardOverviewPage', () => {
     expect(input).toBeDefined();
 
     // Verify suggestions
-    expect(screen.getByText('Summarize my messages')).toBeDefined();
-    expect(screen.getByText("Show today's priorities")).toBeDefined();
-    expect(screen.getByText('What should I focus on today?')).toBeDefined();
-
-    // Click suggestion
-    fireEvent.click(screen.getByText('Summarize my messages'));
     expect(
-      screen.getByText(
-        /Command "Summarize my messages" selected\. Local AI execution connects in Module 05/i,
-      ),
+      screen.getByText('Explain what artificial intelligence is in simple English'),
+    ).toBeDefined();
+    expect(screen.getByText('What should I focus on today?')).toBeDefined();
+    expect(
+      screen.getByText('Summarize the core benefits of a local-first AI operating system'),
     ).toBeDefined();
   });
 

@@ -1,7 +1,7 @@
 # BHUVI – Development Status
 
-**Last Updated:** 2026-11-07
-**Current Phase:** Module 04 – Application Dashboard (COMPLETE)
+**Last Updated:** 2026-11-07  
+**Current Phase:** Module 05 – AI Brain & Model Integration (COMPLETE)
 
 ---
 
@@ -25,8 +25,8 @@
 | 02  | Authentication & User Management       | ✅ **COMPLETE** | Register, Login, JWT auth, Protected `/auth/me`, Auth UI, Security guards                                                            |
 | 03  | Database & Infrastructure              | ✅ **COMPLETE** | PostgreSQL 16, Prisma ORM, BullMQ, Redis 7, PrismaUsersRepository, Worker queue integration                                          |
 | 04  | Application Dashboard                  | ✅ **COMPLETE** | Overview & Settings dashboards, responsive sidebar & mobile drawer, HttpOnly auth integration, backend health telemetry, 0 fake data |
-| 05  | AI Brain & Model Integration           | 📋 Planned      | Awaiting Module 04 review & approval                                                                                                 |
-| 06  | AI Agent Orchestrator                  | 📋 Planned      | Awaiting Module 05                                                                                                                   |
+| 05  | AI Brain & Model Integration           | ✅ **COMPLETE** | Local Ollama integration (`127.0.0.1:11434`), `qwen2.5:3b` model, live chat API & UI, rate limiting, zero paid cloud APIs            |
+| 06  | AI Agent Orchestrator                  | 📋 Planned      | Awaiting Module 05 review & approval                                                                                                 |
 | 07  | Message Intelligence Engine            | 📋 Planned      | Awaiting Module 06                                                                                                                   |
 | 08  | Personal Memory & Knowledge            | 📋 Planned      | Awaiting Modules 05, 03                                                                                                              |
 | 09  | Gmail Integration                      | 📋 Planned      | Awaiting Module 07                                                                                                                   |
@@ -42,65 +42,45 @@
 
 ---
 
-## Module 03 – Acceptance Criteria
+## Module 05 – Acceptance Criteria
 
 ### ✅ All Criteria Met
 
-| Criterion                                        | Status | Evidence                                                                                   |
-| ------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------ |
-| Dedicated database package created               | ✅     | `packages/database` configured with Prisma ORM 5.22                                        |
-| Prisma schema & migration created                | ✅     | `User` entity in `schema.prisma`, SQL migration `20261107000000_init_user`                 |
-| `PrismaService` connection lifecycle implemented | ✅     | `packages/database/src/prisma.service.ts` (`onModuleInit`, `onModuleDestroy`, `isHealthy`) |
-| `PrismaUsersRepository` implemented              | ✅     | `apps/api/src/users/prisma-users.repository.ts` implementing `IUsersRepository`            |
-| In-memory repository replaced for production     | ✅     | `UsersModule` injects `PrismaUsersRepository` for prod & standard execution                |
-| Reusable queue package created                   | ✅     | `packages/queue` wrapping BullMQ 5 and ioredis 5                                           |
-| BullMQ Worker integrated                         | ✅     | `apps/worker/src/main.ts` consumes `infrastructure-check` jobs with graceful shutdown      |
-| Extended dependency-aware health checks          | ✅     | `GET /api/v1/health` probes active status of PostgreSQL and Redis                          |
-| Docker Compose stack configured                  | ✅     | `infrastructure/docker/docker-compose.yml` (PostgreSQL 16 + Redis 7 + volumes)             |
-| PowerShell management automation                 | ✅     | `start-infrastructure.ps1` & `stop-infrastructure.ps1`                                     |
-| Comprehensive setup guides created               | ✅     | `docs/database/` and `docs/infrastructure/` documentation                                  |
-| Existing Module 01 & 02 tests still pass         | ✅     | All authentication, rate limiting, and health tests remain 100% green                      |
-| Typecheck passes                                 | ✅     | `pnpm typecheck` (0 errors across 5 workspace packages)                                    |
-| Lint passes                                      | ✅     | `pnpm lint` (0 errors, 0 warnings across all workspaces)                                   |
-| Production build passes                          | ✅     | `pnpm build` (all packages, applications, and web static pages build cleanly)              |
+| Criterion                                | Status | Evidence                                                                                                    |
+| ---------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------- |
+| Ollama detection & reachability verified | ✅     | Ollama CLI 0.40.3 located at `~\AppData\Local\Programs\Ollama\ollama.exe`, daemon active on port 11434      |
+| Recommended model pulled & verified      | ✅     | `qwen2.5:3b` (1.9 GB) installed and verified with direct prompt inference; `llama3.2:3b` (2.0 GB) available |
+| Shared AI types created                  | ✅     | `packages/shared/src/types/ai.types.ts` compiled into `@bhuvi/shared`                                       |
+| NestJS AI module created                 | ✅     | `apps/api/src/ai/` (`AiModule`, `AiController`, `AiService`, `OllamaProvider`, `ChatDto`, `ai.config.ts`)   |
+| `GET /api/v1/ai/status` implemented      | ✅     | Probes Ollama reachability, active model, model availability, and ping duration                             |
+| `GET /api/v1/ai/models` implemented      | ✅     | Lists installed models with sizes, digest, and details                                                      |
+| `POST /api/v1/ai/chat` implemented       | ✅     | Protected by `JwtAuthGuard`, rate-limited to 20 req/min, input validation (4,000 char max, non-empty)       |
+| BHUVI system prompt injected             | ✅     | Clear identity, local privacy emphasis, honest boundary enforcement, untrusted input protection             |
+| Dashboard Assistant Panel connected      | ✅     | `apps/web/components/dashboard/assistant-panel.tsx` with live message stream, telemetry, Enter-to-send      |
+| Live Ollama status badge displayed       | ✅     | Status badge shows `Connected (qwen2.5:3b)`, `Model Missing`, or `Offline` with live backend sync           |
+| Error & loading states handled           | ✅     | Animated thinking indicator, error alert banners, retry capability, disabled inputs during request          |
+| Real hardware inference verified         | ✅     | Verified live against `qwen2.5:3b` (~93ms eval speed, ~1.2s total roundtrip)                                |
+| Monorepo tests passing                   | ✅     | `pnpm test` (24 suites, 120 tests passed across monorepo)                                                   |
+| Monorepo formatting & lint clean         | ✅     | `pnpm format:check` and `pnpm lint` passed with 0 errors                                                    |
+| Production build passing                 | ✅     | `pnpm build` passed across all packages and applications                                                    |
 
 ---
 
-## Module 04 – Acceptance Criteria
-
-### ✅ All Criteria Met
-
-| Criterion                                  | Status | Evidence                                                                                 |
-| ------------------------------------------ | ------ | ---------------------------------------------------------------------------------------- |
-| Desktop collapsible sidebar implemented    | ✅     | `components/dashboard/sidebar.tsx` with toggle & responsive transition                   |
-| Mobile drawer navigation implemented       | ✅     | `components/dashboard/mobile-sidebar.tsx` with backdrop & close button                   |
-| Topbar with breadcrumb & command search    | ✅     | `components/dashboard/topbar.tsx` with page context & `⌘K` visual command bar            |
-| Personalized greeting & local date         | ✅     | `components/dashboard/welcome-section.tsx` with time-of-day greeting & local date        |
-| 4 Stat cards with honest placeholders      | ✅     | `components/dashboard/stat-card.tsx` with zero fake metrics, showing "Coming soon"       |
-| Branded AI Assistant panel                 | ✅     | `components/dashboard/assistant-panel.tsx` with interactive prompt & suggestion pills    |
-| Proper empty state for Recent Activity     | ✅     | `components/dashboard/recent-activity.tsx` without fabricated entries                    |
-| Proper empty state for Daily Intelligence  | ✅     | `components/dashboard/daily-intelligence.tsx` referencing Module 13                      |
-| Functional Settings page with `/auth/me`   | ✅     | `app/dashboard/settings/page.tsx` rendering user profile & appearance UI                 |
-| Mandatory HttpOnly cookie route protection | ✅     | `lib/auth-context.tsx` with `AuthGuard`, redirects unauthenticated users to `/login`     |
-| Live backend health integration            | ✅     | `lib/use-health.ts` & `components/dashboard/system-status.tsx` querying `/api/v1/health` |
-| Real device screenshots captured           | ✅     | `docs/screenshots/` (Desktop & Mobile for Overview and Settings)                         |
-| Monorepo tests passing                     | ✅     | `pnpm test` (19 suites, 89 passed)                                                       |
-| Production build passing                   | ✅     | `pnpm build` (8 Next.js App Router routes prerendered cleanly)                           |
-
----
-
-## Verification Results (Module 04)
+## Verification Results (Module 05)
 
 ```
-1. Typecheck:
-pnpm typecheck  → PASS (6/6 projects, 0 errors)
+1. Format Check:
+pnpm format:check  → PASS (All matched files use Prettier code style)
 
-2. Lint:
-pnpm lint       → PASS (0 errors, 0 warnings across all workspaces)
+2. Typecheck:
+pnpm typecheck     → PASS (6/6 projects, 0 errors)
 
-3. Automated Tests:
-pnpm test       → PASS (19 suites, 89 tests passed across monorepo)
-  - apps/api: 12 suites, 68 passed
+3. Lint:
+pnpm lint          → PASS (0 errors, 0 warnings across all workspaces)
+
+4. Automated Tests:
+pnpm test          → PASS (24 suites, 120 tests passed across monorepo)
+  - apps/api: 16 suites, 92 passed
     • health.controller.spec.ts (3 passed)
     • users.service.spec.ts (4 passed)
     • prisma-users.repository.spec.ts (6 passed)
@@ -113,21 +93,26 @@ pnpm test       → PASS (19 suites, 89 tests passed across monorepo)
     • auth-rate-limit.spec.ts (1 passed)
     • auth-cookie-integration.spec.ts (6 passed)
     • real-infrastructure.spec.ts (9 passed against live PostgreSQL 16 & Redis 7)
-  - apps/web: 6 suites, 16 passed
+    • ollama.provider.spec.ts (6 passed)
+    • ai.service.spec.ts (4 passed)
+    • ai.controller.spec.ts (6 passed)
+    • real-ai-inference.spec.ts (5 passed against live Ollama qwen2.5:3b)
+  - apps/web: 7 suites, 23 passed
     • page.spec.tsx (1 passed)
     • login.spec.tsx (2 passed)
     • register.spec.tsx (1 passed)
     • dashboard.spec.tsx (5 passed)
     • settings.spec.tsx (4 passed)
     • system-status.spec.tsx (3 passed)
+    • assistant-panel.spec.tsx (7 passed)
   - apps/worker: 1 suite, 5 passed
     • main.spec.ts (5 passed)
 
-4. Real Infrastructure Verification:
-pnpm test:infra  → PASS (Live verification of PostgreSQL 16, Redis 7, BullMQ, degradation & recovery)
+5. Real AI Inference Verification:
+pnpm test:ai       → PASS (Live inference test against qwen2.5:3b, latency ~1,200 ms, status check, model listing, empty prompt validation, auth rejection)
 
-5. Production Build:
-pnpm build      → PASS (@bhuvi/shared, @bhuvi/database, @bhuvi/queue, @bhuvi/api, @bhuvi/worker, @bhuvi/web)
+6. Production Build:
+pnpm build         → PASS (@bhuvi/shared, @bhuvi/database, @bhuvi/queue, @bhuvi/api, @bhuvi/worker, @bhuvi/web)
   Routes generated:
   ○ /
   ○ /_not-found
@@ -141,4 +126,4 @@ pnpm build      → PASS (@bhuvi/shared, @bhuvi/database, @bhuvi/queue, @bhuvi/a
 
 ## Next Steps
 
-> 🛑 **Module 04 is complete. Awaiting user review and explicit approval before starting Module 05 (AI Brain & Model Integration).**
+> 🛑 **Module 05 is complete. Awaiting user review and explicit approval before starting Module 06 (AI Agent Orchestrator).**
