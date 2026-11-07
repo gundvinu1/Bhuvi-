@@ -25,6 +25,7 @@ export interface ResponseMeta {
   timestamp: string;
   version: string;
   requestId?: string;
+  [key: string]: unknown;
 }
 
 /** Structured API error */

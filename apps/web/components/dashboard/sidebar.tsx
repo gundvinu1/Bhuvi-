@@ -17,6 +17,7 @@ import {
   LogoutIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  OrchestratorIcon,
 } from '../ui/icons';
 import { useAuth } from '../../lib/auth-context';
 
@@ -27,6 +28,12 @@ export interface SidebarProps {
 
 export const NAV_ITEMS = [
   { name: 'Overview', href: '/dashboard', icon: OverviewIcon, functional: true },
+  {
+    name: 'AI Orchestrator',
+    href: '/dashboard/orchestrator',
+    icon: OrchestratorIcon,
+    functional: true,
+  },
   {
     name: 'AI Assistant',
     href: '#',

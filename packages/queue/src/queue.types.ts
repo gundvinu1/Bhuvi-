@@ -24,3 +24,18 @@ export interface SanitizedRedisConfig {
   port: number;
   hasPassword: boolean;
 }
+
+export interface ExecutePlanPayload {
+  planId: string;
+  userId: string;
+  executionId: string;
+}
+
+export interface ExecutePlanResult {
+  planId: string;
+  executionId: string;
+  status: 'COMPLETED' | 'FAILED' | 'WAITING_FOR_APPROVAL' | 'CANCELLED';
+  completedSteps: number;
+  totalSteps: number;
+  error?: string;
+}

@@ -18,6 +18,9 @@ export function Topbar({ onOpenMobileMenu }: TopbarProps) {
     if (pathname.includes('/settings')) {
       return { title: 'Settings', context: 'Overview / Settings' };
     }
+    if (pathname.includes('/orchestrator')) {
+      return { title: 'AI Orchestrator', context: 'Dashboard / Orchestrator' };
+    }
     return { title: 'Overview', context: 'Dashboard / Overview' };
   };
 

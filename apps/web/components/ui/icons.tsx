@@ -260,3 +260,16 @@ export function ShieldCheckIcon({ className = 'w-5 h-5', ...props }: IconProps) 
     </svg>
   );
 }
+
+export function OrchestratorIcon({ className = 'w-5 h-5', ...props }: IconProps) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" {...props}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M4 6h16M4 12h16m-7 6h7"
+      />
+    </svg>
+  );
+}

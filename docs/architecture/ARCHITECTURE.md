@@ -93,6 +93,18 @@ Email Arrives → Gmail Webhook → Worker Queue → Message Intelligence
   → Notification (if important) → Dashboard Update
 ```
 
+## Data Flow: AI Agent Orchestration (Module 06)
+
+```
+User Prompt → Intent Analyzer → Intent Category (7 classes)
+  → Planner Service (≤ 10 steps, Cycle Resolution)
+  → Persistence (PostgreSQL AgentPlan & Steps)
+  → Execution Engine (Sequential, Dependency-checked)
+      ├─ Non-sensitive Step → Specialized Agent (Planning, Research, Task) → Output
+      └─ Sensitive Proposal (Communication) → ApprovalRequest (PENDING)
+            └─ Human Approval via UI → Resume / Finalize
+```
+
 ## Port Allocation
 
 | Service       | Port  | Notes         |

@@ -1,6 +1,7 @@
 // ============================================================
 // BHUVI – Prisma Schema
 // Module 03: Database & Infrastructure Foundation
+// Module 06: AI Agent Orchestrator Foundation
 // ============================================================
 
 datasource db {
@@ -21,7 +22,103 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  plans        AgentPlan[]
+  approvals    ApprovalRequest[]
+
   @@index([email])
   @@map("users")
 }
 
+/// Orchestrated AI plan generated from a user prompt
+model AgentPlan {
+  id                  String   @id @default(uuid())
+  userId              String   @map("user_id")
+  title               String
+  prompt              String
+  intentCategory      String   @map("intent_category")
+  status              String   @default("PENDING")
+  clarificationNeeded Boolean  @default(false) @map("clarification_needed")
+  explanation         String?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steps               AgentPlanStep[]
+  executions          AgentExecution[]
+  approvals           ApprovalRequest[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("agent_plans")
+}
+
+/// Individual step within an orchestrated AI plan
+model AgentPlanStep {
+  id               String    @id @default(uuid())
+  planId           String    @map("plan_id")
+  stepIndex        Int       @map("step_index")
+  stepKey          String    @map("step_key")
+  title            String
+  description      String
+  assignedAgent    String    @map("assigned_agent")
+  dependencies     String[]  @default([])
+  status           String    @default("PENDING")
+  requiresApproval Boolean   @default(false) @map("requires_approval")
+  output           Json?
+  error            String?
+  startedAt        DateTime? @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+
+  plan             AgentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  approvals        ApprovalRequest[]
+
+  @@unique([planId, stepKey])
+  @@index([planId])
+  @@index([status])
+  @@map("agent_plan_steps")
+}
+
+/// Execution tracking run for an AI plan
+model AgentExecution {
+  id            String    @id @default(uuid())
+  planId        String    @map("plan_id")
+  status        String    @default("RUNNING")
+  startedAt     DateTime  @default(now()) @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+  error         String?
+  triggerSource String    @default("MANUAL") @map("trigger_source")
+  logs          Json?
+
+  plan          AgentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([status])
+  @@map("agent_executions")
+}
+
+/// Human approval request for sensitive proposals
+model ApprovalRequest {
+  id             String    @id @default(uuid())
+  planId         String    @map("plan_id")
+  stepId         String?   @map("step_id")
+  userId         String    @map("user_id")
+  actionType     String    @map("action_type")
+  description    String
+  proposalData   Json      @map("proposal_data")
+  status         String    @default("PENDING")
+  decisionReason String?   @map("decision_reason")
+  decidedBy      String?   @map("decided_by")
+  decidedAt      DateTime? @map("decided_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan           AgentPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  step           AgentPlanStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([planId])
+  @@index([status])
+  @@map("approval_requests")
+}

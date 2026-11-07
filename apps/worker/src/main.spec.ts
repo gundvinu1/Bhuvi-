@@ -2,8 +2,11 @@ import { APP_NAME, APP_VERSION } from '@bhuvi/shared';
 import { BhuviWorker, loadConfig } from './main';
 import {
   JOB_INFRASTRUCTURE_CHECK,
+  JOB_EXECUTE_PLAN,
   InfrastructureCheckPayload,
   InfrastructureCheckResult,
+  ExecutePlanPayload,
+  ExecutePlanResult,
   Job,
 } from '@bhuvi/queue';
 
@@ -45,6 +48,27 @@ describe('BhuviWorker Foundation & Queue Integration', () => {
     expect(result.workerId).toBe(worker.getWorkerId());
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
     expect(result.processedAt).toBeDefined();
+  });
+
+  it('should process execute-plan job and return completion result', async () => {
+    const worker = new BhuviWorker({ nodeEnv: 'test', port: 3002 });
+    const payload: ExecutePlanPayload = {
+      planId: 'plan-123',
+      userId: 'user-456',
+      executionId: 'exec-789',
+    };
+
+    const mockJob = {
+      id: 'job-exec-1',
+      name: JOB_EXECUTE_PLAN,
+      data: payload,
+    } as unknown as Job;
+
+    const result = (await worker.processJob(mockJob)) as ExecutePlanResult;
+    expect(result.status).toBe('COMPLETED');
+    expect(result.planId).toBe('plan-123');
+    expect(result.executionId).toBe('exec-789');
+    expect(result.completedSteps).toBe(1);
   });
 
   it('should handle unknown job gracefully without crashing', async () => {

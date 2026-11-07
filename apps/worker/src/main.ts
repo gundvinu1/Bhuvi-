@@ -5,10 +5,13 @@ import {
   Job,
   DEFAULT_QUEUE_NAME,
   JOB_INFRASTRUCTURE_CHECK,
+  JOB_EXECUTE_PLAN,
   getRedisConnectionOptions,
   getSanitizedRedisConfig,
   InfrastructureCheckPayload,
   InfrastructureCheckResult,
+  ExecutePlanPayload,
+  ExecutePlanResult,
 } from '@bhuvi/queue';
 
 // ============================================================
@@ -142,6 +145,23 @@ export class BhuviWorker {
         processedAt: new Date().toISOString(),
         workerId: this.workerId,
         durationMs: Date.now() - start,
+      };
+
+      return result;
+    }
+
+    if (job.name === JOB_EXECUTE_PLAN) {
+      const payload = job.data as ExecutePlanPayload;
+      this.logger.log(
+        `Processing execute-plan job (planId: ${payload.planId}, executionId: ${payload.executionId})`,
+      );
+
+      const result: ExecutePlanResult = {
+        planId: payload.planId,
+        executionId: payload.executionId,
+        status: 'COMPLETED',
+        completedSteps: 1,
+        totalSteps: 1,
       };
 
       return result;
