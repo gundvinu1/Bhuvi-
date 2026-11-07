@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { APP_NAME, APP_VERSION } from '@bhuvi/shared';
+import { PrismaClient } from '@bhuvi/database';
 import {
   Worker,
   Job,
@@ -62,12 +63,14 @@ export class BhuviWorker {
   private readonly logger = new Logger('BhuviWorker');
   private readonly config: WorkerConfig;
   private readonly workerId: string;
+  private readonly prisma: PrismaClient | null = null;
   private worker: Worker | null = null;
   private isShuttingDown = false;
 
-  constructor(config: WorkerConfig) {
+  constructor(config: WorkerConfig, prisma?: PrismaClient) {
     this.config = config;
     this.workerId = `worker-${randomUUID().substring(0, 8)}`;
+    this.prisma = prisma ?? null;
   }
 
   getWorkerId(): string {
@@ -155,6 +158,63 @@ export class BhuviWorker {
       this.logger.log(
         `Processing execute-plan job (planId: ${payload.planId}, executionId: ${payload.executionId})`,
       );
+
+      // Verify PostgreSQL plan status to prevent duplicate execution or executing cancelled/completed plans
+      if (this.prisma) {
+        try {
+          const plan = await this.prisma.agentPlan.findUnique({
+            where: { id: payload.planId },
+            include: { steps: true },
+          });
+
+          if (!plan) {
+            this.logger.warn(`Plan ${payload.planId} not found in database. Skipping.`);
+            return {
+              planId: payload.planId,
+              executionId: payload.executionId,
+              status: 'FAILED',
+              completedSteps: 0,
+              totalSteps: 0,
+            };
+          }
+
+          if (plan.status === 'COMPLETED') {
+            this.logger.log(
+              `Plan ${payload.planId} is already completed. Skipping redundant worker execution.`,
+            );
+            return {
+              planId: payload.planId,
+              executionId: payload.executionId,
+              status: 'COMPLETED',
+              completedSteps: plan.steps.length,
+              totalSteps: plan.steps.length,
+            };
+          }
+
+          if (plan.status === 'CANCELLED') {
+            this.logger.log(`Plan ${payload.planId} is cancelled. Skipping execution.`);
+            return {
+              planId: payload.planId,
+              executionId: payload.executionId,
+              status: 'CANCELLED',
+              completedSteps: 0,
+              totalSteps: plan.steps.length,
+            };
+          }
+
+          // If execution record exists, mark as COMPLETED in DB upon successful worker processing
+          if (payload.executionId) {
+            await this.prisma.agentExecution.updateMany({
+              where: { id: payload.executionId, status: { in: ['PENDING', 'RUNNING'] } },
+              data: { status: 'COMPLETED', completedAt: new Date() },
+            });
+          }
+        } catch (dbErr: unknown) {
+          this.logger.warn(
+            `Database check during execute-plan job failed: ${(dbErr as Error).message}`,
+          );
+        }
+      }
 
       const result: ExecutePlanResult = {
         planId: payload.planId,

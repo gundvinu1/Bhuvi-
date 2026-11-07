@@ -196,9 +196,29 @@ export class PlannerService {
       throw new BadRequestException(`Plan step count cannot exceed maximum of ${MAX_PLAN_STEPS}`);
     }
 
-    const stepKeys = new Set(steps.map((s) => s.stepKey));
+    const stepKeys = new Set<string>();
 
-    // 1. Validate that all referenced dependencies exist and are not self-referential
+    // 1. Validate unique step keys and authorized agent roles
+    for (const step of steps) {
+      if (!step.stepKey || !step.stepKey.trim()) {
+        throw new BadRequestException('Each plan step must have a non-empty stepKey');
+      }
+
+      if (stepKeys.has(step.stepKey)) {
+        throw new BadRequestException(
+          `Duplicate stepKey "${step.stepKey}" found in plan. Step identifiers must be unique.`,
+        );
+      }
+      stepKeys.add(step.stepKey);
+
+      if (!VALID_ROLES[step.assignedAgent]) {
+        throw new BadRequestException(
+          `Step "${step.stepKey}" has invalid assignedAgent "${step.assignedAgent}". Must be one of PLANNING, RESEARCH, COMMUNICATION, TASK.`,
+        );
+      }
+    }
+
+    // 2. Validate that all referenced dependencies exist and are not self-referential
     for (const step of steps) {
       for (const dep of step.dependencies) {
         if (dep === step.stepKey) {
@@ -214,7 +234,7 @@ export class PlannerService {
       }
     }
 
-    // 2. Circular dependency check using Depth-First Search (cycle detection)
+    // 3. Circular dependency check using Depth-First Search (cycle detection)
     const adjacency = new Map<string, string[]>();
     for (const step of steps) {
       adjacency.set(step.stepKey, step.dependencies);

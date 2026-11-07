@@ -5,24 +5,89 @@ import {
   BadRequestException,
   Logger,
   OnModuleInit,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { PrismaService, Prisma } from '@bhuvi/database';
 import { AgentRole } from '@bhuvi/shared';
+import { Redis, getRedisConnectionOptions } from '@bhuvi/queue';
 import { AgentRegistryService } from '../agents/agent-registry.service';
 import { ApprovalService } from '../approval/approval.service';
 import { StepPreviousOutput } from '../agents/base-agent.interface';
 import { ExecutionSummary } from './execution.types';
 
 @Injectable()
-export class ExecutionEngineService implements OnModuleInit {
+export class ExecutionEngineService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ExecutionEngineService.name);
   private activeExecutions = new Set<string>();
+  private redisClient: Redis | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly agentRegistry: AgentRegistryService,
     private readonly approvalService: ApprovalService,
   ) {}
+
+  private getRedisClient(): Redis | null {
+    if (this.redisClient) return this.redisClient;
+    try {
+      const opts = getRedisConnectionOptions();
+      this.redisClient = new Redis({
+        host: opts.host,
+        port: opts.port,
+        password: opts.password,
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+        connectTimeout: 2000,
+      });
+      return this.redisClient;
+    } catch {
+      return null;
+    }
+  }
+
+  async acquireDistributedLock(planId: string, lockVal: string): Promise<boolean> {
+    const redis = this.getRedisClient();
+    if (!redis) return true; // Graceful fallback to PostgreSQL atomic lock
+    try {
+      if (redis.status === 'wait') {
+        await redis.connect();
+      }
+      const res = await redis.set(`lock:plan:${planId}`, lockVal, 'EX', 60, 'NX');
+      return res === 'OK';
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Redis lock check failed, relying on PostgreSQL atomic lock: ${(err as Error).message}`,
+      );
+      return true;
+    }
+  }
+
+  async releaseDistributedLock(planId: string, lockVal: string): Promise<void> {
+    const redis = this.getRedisClient();
+    if (!redis || redis.status !== 'ready') return;
+    try {
+      const lua = `
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+          return redis.call("del", KEYS[1])
+        else
+          return 0
+        end
+      `;
+      await redis.eval(lua, 1, `lock:plan:${planId}`, lockVal);
+    } catch {
+      // Ignore cleanup error on shutdown
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.redisClient) {
+      try {
+        await this.redisClient.quit();
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   /**
    * Recovers from previous server crashes or restarts by resetting orphaned RUNNING plans.
@@ -66,85 +131,106 @@ export class ExecutionEngineService implements OnModuleInit {
    * Enforces ownership, duplicate execution prevention, and dependency resolution.
    */
   async executePlan(planId: string, userId: string): Promise<ExecutionSummary> {
-    // Atomic status transition in PostgreSQL prevents simultaneous execution across multiple API instances
-    const atomicClaim = await this.prisma.agentPlan.updateMany({
-      where: {
-        id: planId,
-        userId,
-        status: { in: ['PENDING', 'WAITING_FOR_APPROVAL', 'FAILED', 'READY'] },
-      },
-      data: {
-        status: 'RUNNING',
-      },
-    });
-
-    if (atomicClaim.count === 0) {
-      const existing = await this.prisma.agentPlan.findUnique({ where: { id: planId } });
-      if (!existing) {
-        throw new NotFoundException(`Plan with ID "${planId}" not found`);
-      }
-      if (existing.userId !== userId) {
-        throw new ForbiddenException('You do not have permission to execute this plan');
-      }
-      if (existing.status === 'RUNNING' || this.activeExecutions.has(planId)) {
-        throw new BadRequestException('Plan is already actively running');
-      }
-      if (existing.status === 'COMPLETED') {
-        throw new BadRequestException('Plan is already completed');
-      }
-      if (existing.status === 'CANCELLED') {
-        throw new BadRequestException('Cannot execute a cancelled plan');
-      }
-      throw new BadRequestException(`Cannot execute plan in status "${existing.status}"`);
+    // 1. In-process fast-fail check
+    if (this.activeExecutions.has(planId)) {
+      throw new BadRequestException('Plan is already actively running');
     }
 
-    this.activeExecutions.add(planId);
-
-    // Create execution run record
-    const execution = await this.prisma.agentExecution.create({
-      data: {
-        planId,
-        status: 'RUNNING',
-        triggerSource: 'MANUAL',
-      },
-    });
-
-    this.logger.log(`Starting execution run [${execution.id}] for plan [${planId}]`);
+    // 2. Redis-backed distributed lock with 60s TTL
+    const lockVal = `exec-${Date.now()}-${userId}`;
+    const acquiredLock = await this.acquireDistributedLock(planId, lockVal);
+    if (!acquiredLock) {
+      throw new BadRequestException(
+        'Plan is already actively running (locked by distributed lock)',
+      );
+    }
 
     try {
-      const summary = await this.processPlanSteps(planId, execution.id, userId);
-
-      await this.prisma.agentExecution.update({
-        where: { id: execution.id },
+      // 3. Atomic status transition in PostgreSQL prevents simultaneous execution across multiple API instances
+      const atomicClaim = await this.prisma.agentPlan.updateMany({
+        where: {
+          id: planId,
+          userId,
+          status: { in: ['PENDING', 'WAITING_FOR_APPROVAL', 'FAILED', 'READY'] },
+        },
         data: {
-          status: summary.status,
-          completedAt: new Date(),
-          error: summary.error,
+          status: 'RUNNING',
         },
       });
 
-      return summary;
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Plan execution failed for [${planId}]: ${errorMsg}`);
+      if (atomicClaim.count === 0) {
+        await this.releaseDistributedLock(planId, lockVal);
+        const existing = await this.prisma.agentPlan.findUnique({ where: { id: planId } });
+        if (!existing) {
+          throw new NotFoundException(`Plan with ID "${planId}" not found`);
+        }
+        if (existing.userId !== userId) {
+          throw new ForbiddenException('You do not have permission to execute this plan');
+        }
+        if (existing.status === 'RUNNING') {
+          throw new BadRequestException('Plan is already actively running');
+        }
+        if (existing.status === 'COMPLETED') {
+          throw new BadRequestException('Plan is already completed');
+        }
+        if (existing.status === 'CANCELLED') {
+          throw new BadRequestException('Cannot execute a cancelled plan');
+        }
+        throw new BadRequestException(`Cannot execute plan in status "${existing.status}"`);
+      }
 
-      await this.prisma.agentExecution.update({
-        where: { id: execution.id },
+      this.activeExecutions.add(planId);
+
+      // Create execution run record
+      const execution = await this.prisma.agentExecution.create({
         data: {
-          status: 'FAILED',
-          completedAt: new Date(),
-          error: errorMsg,
+          planId,
+          status: 'RUNNING',
+          triggerSource: 'MANUAL',
         },
       });
 
-      await this.prisma.agentPlan.update({
-        where: { id: planId },
-        data: { status: 'FAILED' },
-      });
+      this.logger.log(`Starting execution run [${execution.id}] for plan [${planId}]`);
 
+      try {
+        const summary = await this.processPlanSteps(planId, execution.id, userId);
+
+        await this.prisma.agentExecution.update({
+          where: { id: execution.id },
+          data: {
+            status: summary.status,
+            completedAt: new Date(),
+            error: summary.error,
+          },
+        });
+
+        return summary;
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`Plan execution failed for [${planId}]: ${errorMsg}`);
+
+        await this.prisma.agentExecution.update({
+          where: { id: execution.id },
+          data: {
+            status: 'FAILED',
+            completedAt: new Date(),
+            error: errorMsg,
+          },
+        });
+
+        await this.prisma.agentPlan.update({
+          where: { id: planId },
+          data: { status: 'FAILED' },
+        });
+
+        throw err;
+      } finally {
+        this.activeExecutions.delete(planId);
+        await this.releaseDistributedLock(planId, lockVal);
+      }
+    } catch (err) {
+      await this.releaseDistributedLock(planId, lockVal);
       throw err;
-    } finally {
-      this.activeExecutions.delete(planId);
     }
   }
 

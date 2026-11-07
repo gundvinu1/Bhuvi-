@@ -11,6 +11,7 @@ describe('Real AI Agent Orchestrator Integration (qwen2.5:3b + PostgreSQL 16)', 
   let user1Token: string;
   let user2Token: string;
   let createdPlanId: string;
+  let planToCancelId: string;
 
   beforeAll(async () => {
     process.env['AUTH_DEV_MODE'] = 'false';
@@ -137,7 +138,7 @@ describe('Real AI Agent Orchestrator Integration (qwen2.5:3b + PostgreSQL 16)', 
       .set('Authorization', `Bearer ${user1Token}`)
       .send({ message: 'Cancel test plan task' });
 
-    const planToCancelId = planRes.body.data.id;
+    planToCancelId = planRes.body.data.id;
 
     const cancelRes = await request(app.getHttpServer())
       .post(`/api/v1/orchestrator/plans/${planToCancelId}/cancel`)
@@ -205,5 +206,46 @@ describe('Real AI Agent Orchestrator Integration (qwen2.5:3b + PostgreSQL 16)', 
 
     // Should return 404 (if non-existent) or 403 (if belongs to user1)
     expect([HttpStatus.NOT_FOUND, HttpStatus.FORBIDDEN]).toContain(resApprove.status);
+  });
+
+  it('12. Redis-backed distributed lock prevents concurrent acquisition and releases cleanly', async () => {
+    const { ExecutionEngineService } = await import('./execution/execution-engine.service');
+    const executionEngine = app.get(ExecutionEngineService);
+
+    const testLockPlanId = `test-plan-${Date.now()}`;
+    const lockVal1 = 'exec-instance-1';
+    const lockVal2 = 'exec-instance-2';
+
+    // Instance 1 acquires lock
+    const acquired1 = await executionEngine.acquireDistributedLock(testLockPlanId, lockVal1);
+    expect(acquired1).toBe(true);
+
+    // Instance 2 attempts to acquire same lock simultaneously -> must be rejected
+    const acquired2 = await executionEngine.acquireDistributedLock(testLockPlanId, lockVal2);
+    expect(acquired2).toBe(false);
+
+    // Instance 1 releases lock
+    await executionEngine.releaseDistributedLock(testLockPlanId, lockVal1);
+
+    // Instance 2 can now acquire lock
+    const acquiredAfterRelease = await executionEngine.acquireDistributedLock(
+      testLockPlanId,
+      lockVal2,
+    );
+    expect(acquiredAfterRelease).toBe(true);
+
+    // Clean up
+    await executionEngine.releaseDistributedLock(testLockPlanId, lockVal2);
+  });
+
+  it('13. POST /api/v1/orchestrator/plans/:id/execute rejects duplicate execution when already completed or cancelled', async () => {
+    // Attempting to execute the already cancelled plan from test 6
+    const res = await request(app.getHttpServer())
+      .post(`/api/v1/orchestrator/plans/${planToCancelId}/execute`)
+      .set('Authorization', `Bearer ${user1Token}`);
+
+    // Expect 400 Bad Request because plan is already completed/cancelled
+    expect(res.status).toBe(HttpStatus.BAD_REQUEST);
+    expect(res.body.success).toBe(false);
   });
 });

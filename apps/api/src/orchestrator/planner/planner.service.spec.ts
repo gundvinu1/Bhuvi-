@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
+import { AgentRole } from '@bhuvi/shared';
 import { PlannerService, MAX_PLAN_STEPS } from './planner.service';
 import { OllamaProvider } from '../../ai/ollama.provider';
 import { IntentAnalysisResult } from '../intent/intent.types';
@@ -201,6 +202,53 @@ describe('PlannerService', () => {
     ];
 
     expect(() => service.validatePlanStructure(validDagSteps)).not.toThrow();
+  });
+
+  it('rejects duplicate stepKeys with BadRequestException', () => {
+    const duplicateStepKeySteps = [
+      {
+        stepKey: 'step-1',
+        stepIndex: 1,
+        title: 'Step 1',
+        description: 'Desc 1',
+        assignedAgent: 'PLANNING' as const,
+        dependencies: [],
+        requiresApproval: false,
+      },
+      {
+        stepKey: 'step-1', // Duplicate!
+        stepIndex: 2,
+        title: 'Step 2',
+        description: 'Desc 2',
+        assignedAgent: 'RESEARCH' as const,
+        dependencies: [],
+        requiresApproval: false,
+      },
+    ];
+
+    expect(() => service.validatePlanStructure(duplicateStepKeySteps)).toThrow(BadRequestException);
+    expect(() => service.validatePlanStructure(duplicateStepKeySteps)).toThrow(
+      /Duplicate stepKey/i,
+    );
+  });
+
+  it('rejects invalid assignedAgent with BadRequestException', () => {
+    const invalidAgentSteps = [
+      {
+        stepKey: 'step-1',
+        stepIndex: 1,
+        title: 'Step 1',
+        description: 'Desc 1',
+        assignedAgent: 'HACKER_BOT' as unknown as AgentRole,
+        dependencies: [],
+        requiresApproval: false,
+      },
+    ];
+
+    expect(() => service.validatePlanStructure(invalidAgentSteps)).toThrow(BadRequestException);
+    expect(() => service.validatePlanStructure(invalidAgentSteps)).toThrow(
+      /invalid assignedAgent/i,
+    );
   });
 
   it('produces deterministic fallback plan when Ollama fails', async () => {

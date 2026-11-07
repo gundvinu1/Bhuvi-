@@ -1,6 +1,6 @@
 import { Queue } from 'bullmq';
-import { DEFAULT_QUEUE_NAME, JOB_INFRASTRUCTURE_CHECK } from './queue.constants';
-import { InfrastructureCheckPayload } from './queue.types';
+import { DEFAULT_QUEUE_NAME, JOB_INFRASTRUCTURE_CHECK, JOB_EXECUTE_PLAN } from './queue.constants';
+import { InfrastructureCheckPayload, ExecutePlanPayload } from './queue.types';
 import { getRedisConnectionOptions } from './queue.config';
 
 /**
@@ -24,6 +24,22 @@ export async function enqueueInfrastructureCheck(
     backoff: {
       type: 'exponential',
       delay: 1000,
+    },
+    removeOnComplete: 100,
+    removeOnFail: 500,
+  });
+}
+
+/**
+ * Enqueues an execute-plan job for asynchronous worker processing.
+ */
+export async function enqueueExecutePlan(queue: Queue, payload: ExecutePlanPayload) {
+  return queue.add(JOB_EXECUTE_PLAN, payload, {
+    jobId: `plan-exec-${payload.planId}-${payload.executionId}`,
+    attempts: 2,
+    backoff: {
+      type: 'fixed',
+      delay: 2000,
     },
     removeOnComplete: 100,
     removeOnFail: 500,

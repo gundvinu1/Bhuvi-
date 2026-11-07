@@ -1,4 +1,5 @@
 import { APP_NAME, APP_VERSION } from '@bhuvi/shared';
+import { PrismaClient } from '@bhuvi/database';
 import { BhuviWorker, loadConfig } from './main';
 import {
   JOB_INFRASTRUCTURE_CHECK,
@@ -69,6 +70,90 @@ describe('BhuviWorker Foundation & Queue Integration', () => {
     expect(result.planId).toBe('plan-123');
     expect(result.executionId).toBe('exec-789');
     expect(result.completedSteps).toBe(1);
+  });
+
+  it('should skip redundant worker execution if plan is already COMPLETED in database', async () => {
+    const mockPrisma = {
+      agentPlan: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'plan-123',
+          status: 'COMPLETED',
+          steps: [{ id: 's-1' }, { id: 's-2' }],
+        }),
+      },
+      agentExecution: {
+        updateMany: jest.fn(),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+    const mockJob = {
+      id: 'job-exec-2',
+      name: JOB_EXECUTE_PLAN,
+      data: { planId: 'plan-123', executionId: 'exec-999' },
+    } as unknown as Job;
+
+    const result = (await worker.processJob(mockJob)) as ExecutePlanResult;
+    expect(result.status).toBe('COMPLETED');
+    expect(result.completedSteps).toBe(2);
+    expect(mockPrisma.agentExecution.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('should respect cancellation and skip execution if plan is CANCELLED in database', async () => {
+    const mockPrisma = {
+      agentPlan: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'plan-123',
+          status: 'CANCELLED',
+          steps: [{ id: 's-1' }],
+        }),
+      },
+      agentExecution: {
+        updateMany: jest.fn(),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+    const mockJob = {
+      id: 'job-exec-3',
+      name: JOB_EXECUTE_PLAN,
+      data: { planId: 'plan-123', executionId: 'exec-888' },
+    } as unknown as Job;
+
+    const result = (await worker.processJob(mockJob)) as ExecutePlanResult;
+    expect(result.status).toBe('CANCELLED');
+    expect(result.completedSteps).toBe(0);
+    expect(mockPrisma.agentExecution.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('should handle missing plan gracefully by returning FAILED status', async () => {
+    const mockPrisma = {
+      agentPlan: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+      agentExecution: {
+        updateMany: jest.fn(),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+    const mockJob = {
+      id: 'job-exec-4',
+      name: JOB_EXECUTE_PLAN,
+      data: { planId: 'nonexistent-plan', executionId: 'exec-000' },
+    } as unknown as Job;
+
+    const result = (await worker.processJob(mockJob)) as ExecutePlanResult;
+    expect(result.status).toBe('FAILED');
   });
 
   it('should handle unknown job gracefully without crashing', async () => {
