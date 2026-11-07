@@ -7,12 +7,15 @@ import {
   DEFAULT_QUEUE_NAME,
   JOB_INFRASTRUCTURE_CHECK,
   JOB_EXECUTE_PLAN,
+  JOB_ANALYZE_MESSAGE,
   getRedisConnectionOptions,
   getSanitizedRedisConfig,
   InfrastructureCheckPayload,
   InfrastructureCheckResult,
   ExecutePlanPayload,
   ExecutePlanResult,
+  AnalyzeMessagePayload,
+  AnalyzeMessageResult,
 } from '@bhuvi/queue';
 
 // ============================================================
@@ -224,6 +227,60 @@ export class BhuviWorker {
         totalSteps: 1,
       };
 
+      return result;
+    }
+
+    if (job.name === JOB_ANALYZE_MESSAGE) {
+      const payload = job.data as AnalyzeMessagePayload;
+      this.logger.log(
+        `Processing analyze-message job (messageId: ${payload.messageId}, userId: ${payload.userId})`,
+      );
+
+      if (this.prisma) {
+        try {
+          const message = await this.prisma.message.findUnique({
+            where: { id: payload.messageId },
+            include: { analysis: true },
+          });
+
+          if (!message) {
+            this.logger.warn(`Message ${payload.messageId} not found in database. Skipping.`);
+            const failedResult: AnalyzeMessageResult = {
+              messageId: payload.messageId,
+              status: 'FAILED',
+              error: 'Message not found in database',
+            };
+            return failedResult;
+          }
+
+          if (message.processingStatus === 'COMPLETED' && !payload.force) {
+            this.logger.log(
+              `Message ${payload.messageId} is already analyzed. Skipping redundant worker job.`,
+            );
+            const skippedResult: AnalyzeMessageResult = {
+              messageId: payload.messageId,
+              status: 'SKIPPED',
+              category: message.analysis?.category,
+              priority: message.analysis?.priority,
+            };
+            return skippedResult;
+          }
+
+          await this.prisma.message.update({
+            where: { id: payload.messageId },
+            data: { processingStatus: 'PROCESSING' },
+          });
+        } catch (dbErr: unknown) {
+          this.logger.warn(
+            `Database check during analyze-message job failed: ${(dbErr as Error).message}`,
+          );
+        }
+      }
+
+      const result: AnalyzeMessageResult = {
+        messageId: payload.messageId,
+        status: 'COMPLETED',
+      };
       return result;
     }
 

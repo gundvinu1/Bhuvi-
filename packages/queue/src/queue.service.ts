@@ -1,6 +1,15 @@
 import { Queue } from 'bullmq';
-import { DEFAULT_QUEUE_NAME, JOB_INFRASTRUCTURE_CHECK, JOB_EXECUTE_PLAN } from './queue.constants';
-import { InfrastructureCheckPayload, ExecutePlanPayload } from './queue.types';
+import {
+  DEFAULT_QUEUE_NAME,
+  JOB_INFRASTRUCTURE_CHECK,
+  JOB_EXECUTE_PLAN,
+  JOB_ANALYZE_MESSAGE,
+} from './queue.constants';
+import {
+  InfrastructureCheckPayload,
+  ExecutePlanPayload,
+  AnalyzeMessagePayload,
+} from './queue.types';
 import { getRedisConnectionOptions } from './queue.config';
 
 /**
@@ -39,6 +48,22 @@ export async function enqueueExecutePlan(queue: Queue, payload: ExecutePlanPaylo
     attempts: 2,
     backoff: {
       type: 'fixed',
+      delay: 2000,
+    },
+    removeOnComplete: 100,
+    removeOnFail: 500,
+  });
+}
+
+/**
+ * Enqueues an analyze-message job for asynchronous background processing.
+ */
+export async function enqueueAnalyzeMessage(queue: Queue, payload: AnalyzeMessagePayload) {
+  return queue.add(JOB_ANALYZE_MESSAGE, payload, {
+    jobId: `msg-analyze-${payload.messageId}`,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
       delay: 2000,
     },
     removeOnComplete: 100,

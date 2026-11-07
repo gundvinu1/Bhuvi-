@@ -24,6 +24,9 @@ model User {
 
   plans        AgentPlan[]
   approvals    ApprovalRequest[]
+  messages     Message[]
+  actionItems  MessageActionItem[]
+  labels       MessageLabel[]
 
   @@index([email])
   @@map("users")
@@ -121,4 +124,119 @@ model ApprovalRequest {
   @@index([planId])
   @@index([status])
   @@map("approval_requests")
+}
+
+// ============================================================
+// Module 07: Message Intelligence Engine
+// ============================================================
+
+/// Ingested message model for intelligence processing
+model Message {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  source           String   @default("MANUAL")
+  senderName       String   @map("sender_name")
+  senderIdentifier String?  @map("sender_identifier")
+  subject          String?
+  content          String
+  contentHash      String   @map("content_hash")
+  processingStatus String   @default("RECEIVED") @map("processing_status")
+  receivedAt       DateTime @default(now()) @map("received_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysis         MessageAnalysis?
+  actionItems      MessageActionItem[]
+  labelAssignments MessageLabelAssignment[]
+
+  @@index([userId])
+  @@index([processingStatus])
+  @@index([receivedAt])
+  @@index([userId, contentHash])
+  @@map("messages")
+}
+
+/// Structured AI analysis for an ingested message
+model MessageAnalysis {
+  id                  String   @id @default(uuid())
+  messageId           String   @unique @map("message_id")
+  category            String
+  priority            String
+  priorityExplanation String?  @map("priority_explanation")
+  urgency             String
+  intent              String
+  sentiment           String
+  summary             String
+  requiresReply       Boolean  @default(false) @map("requires_reply")
+  requiresAction      Boolean  @default(false) @map("requires_action")
+  confidence          Float    @default(0.0)
+  extractedEntities   Json     @default("[]") @map("extracted_entities")
+  analysisMetadata    Json?    @map("analysis_metadata")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  message             Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([category])
+  @@index([priority])
+  @@index([urgency])
+  @@index([requiresAction])
+  @@index([requiresReply])
+  @@map("message_analyses")
+}
+
+/// Actionable item extracted from an analyzed message
+model MessageActionItem {
+  id          String    @id @default(uuid())
+  messageId   String    @map("message_id")
+  userId      String    @map("user_id")
+  title       String
+  description String?
+  priority    String    @default("MEDIUM")
+  dueDate     DateTime? @map("due_date")
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  message     Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([messageId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("message_action_items")
+}
+
+/// User-defined or automated message category tag
+model MessageLabel {
+  id          String                   @id @default(uuid())
+  userId      String                   @map("user_id")
+  name        String
+  color       String?
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  updatedAt   DateTime                 @updatedAt @map("updated_at")
+
+  user        User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments MessageLabelAssignment[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("message_labels")
+}
+
+/// Join table for messages and labels
+model MessageLabelAssignment {
+  id        String       @id @default(uuid())
+  messageId String       @map("message_id")
+  labelId   String       @map("label_id")
+
+  message   Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  label     MessageLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, labelId])
+  @@index([messageId])
+  @@index([labelId])
+  @@map("message_label_assignments")
 }

@@ -43,12 +43,10 @@ export const NAV_ITEMS = [
     note: 'Module 05',
   },
   {
-    name: 'Messages',
-    href: '#',
+    name: 'Message Intelligence',
+    href: '/dashboard/messages',
     icon: MessagesIcon,
-    functional: false,
-    badge: 'Soon',
-    note: 'Module 07',
+    functional: true,
   },
   {
     name: 'Emails',

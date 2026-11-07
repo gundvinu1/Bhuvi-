@@ -85,12 +85,20 @@ Secrets are never hardcoded. Authentication is required for all API routes (Modu
 18 Security (cross-cutting concern)
 ```
 
-## Data Flow: Message Processing
+## Data Flow: Message Intelligence Engine (Module 07)
 
 ```
-Email Arrives → Gmail Webhook → Worker Queue → Message Intelligence
-  → AI Classification → Urgency Scoring → Memory Storage
-  → Notification (if important) → Dashboard Update
+Incoming Message (API / Manual Ingestion)
+  → Duplicate Detection (SHA-256 Hash + Sender Matching)
+  → Ingestion in PostgreSQL (Message: RECEIVED)
+  → MessageIntelligenceService (Prompt Injection Guard: <user_message_content_untrusted>)
+  → Local Ollama (qwen2.5:3b) Structured JSON Analysis
+      ├─ Classification (10 Categories), Priority & Urgency
+      ├─ Sentiment, Intent, and 1-2 sentence Summary
+      ├─ Action Items & Due Date Extraction
+      └─ Fallback Heuristics Engine (on LLM timeout / offline)
+  → Transactional Persistence (MessageAnalysis + MessageActionItems)
+  → Status: COMPLETED → Available on Dashboard & to Orchestrator Agents
 ```
 
 ## Data Flow: AI Agent Orchestration (Module 06)

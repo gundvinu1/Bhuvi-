@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AgentRole } from '@bhuvi/shared';
 import { OllamaProvider } from '../../ai/ollama.provider';
+import { MessageIntelligenceService } from '../../messages/services/message-intelligence.service';
 import { BaseAgent, AgentContext, AgentExecutionResult } from './base-agent.interface';
 
 @Injectable()
@@ -10,7 +11,10 @@ export class TaskAgent implements BaseAgent {
     'Identifies actionable tasks, constructs prioritized checklists, and sets execution milestones';
   private readonly logger = new Logger(TaskAgent.name);
 
-  constructor(private readonly ollamaProvider: OllamaProvider) {}
+  constructor(
+    private readonly ollamaProvider: OllamaProvider,
+    @Optional() private readonly messageIntelligenceService?: MessageIntelligenceService,
+  ) {}
 
   async execute(context: AgentContext): Promise<AgentExecutionResult> {
     const startTime = Date.now();
@@ -28,6 +32,52 @@ Your role:
       ? `\nPrior findings from earlier steps:\n` +
         context.previousOutputs.map((p) => `- ${p.title} (${p.agent}): ${p.summary}`).join('\n')
       : '';
+
+    const isMessageAnalysis =
+      /\b(analyze\s+(this\s+)?(message|email|text)|extract\s+tasks?\s+from\s+(this\s+)?(message|email))\b/i.test(
+        context.userPrompt,
+      );
+
+    if (isMessageAnalysis && this.messageIntelligenceService) {
+      try {
+        const analysis = await this.messageIntelligenceService.analyzeContent(
+          context.userPrompt,
+          'User Request',
+          context.stepTitle,
+        );
+
+        const checklistLines = analysis.actionItems.map(
+          (item) =>
+            `- [ ] [${item.priority}] ${item.title}${item.description ? `: ${item.description}` : ''}`,
+        );
+
+        const summary = `Message analyzed: ${analysis.summary} (${analysis.actionItems.length} action item(s) extracted)`;
+        const checklist =
+          checklistLines.length > 0
+            ? checklistLines.join('\n')
+            : `- [ ] [${analysis.priority}] Review message and determine follow-up actions`;
+
+        return {
+          success: true,
+          agent: this.role,
+          summary,
+          details: {
+            checklist,
+            category: analysis.category,
+            priority: analysis.priority,
+            urgency: analysis.urgency,
+            actionItems: analysis.actionItems,
+            stepKey: context.stepKey,
+            executionTimeMs: Date.now() - startTime,
+          },
+          durationMs: Date.now() - startTime,
+        };
+      } catch (intelligenceErr: unknown) {
+        this.logger.warn(
+          `MessageIntelligenceService failed in TaskAgent, falling back to default LLM: ${(intelligenceErr as Error).message}`,
+        );
+      }
+    }
 
     try {
       const response = await this.ollamaProvider.chat([

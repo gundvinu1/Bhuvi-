@@ -4,10 +4,13 @@ import { BhuviWorker, loadConfig } from './main';
 import {
   JOB_INFRASTRUCTURE_CHECK,
   JOB_EXECUTE_PLAN,
+  JOB_ANALYZE_MESSAGE,
   InfrastructureCheckPayload,
   InfrastructureCheckResult,
   ExecutePlanPayload,
   ExecutePlanResult,
+  AnalyzeMessagePayload,
+  AnalyzeMessageResult,
   Job,
 } from '@bhuvi/queue';
 
@@ -154,6 +157,89 @@ describe('BhuviWorker Foundation & Queue Integration', () => {
 
     const result = (await worker.processJob(mockJob)) as ExecutePlanResult;
     expect(result.status).toBe('FAILED');
+  });
+
+  it('should process analyze-message job successfully and update DB status', async () => {
+    const mockPrisma = {
+      message: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'msg-101',
+          processingStatus: 'RECEIVED',
+          analysis: null,
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'msg-101', processingStatus: 'PROCESSING' }),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+    const mockJob = {
+      id: 'job-msg-1',
+      name: JOB_ANALYZE_MESSAGE,
+      data: { messageId: 'msg-101', userId: 'user-1' } as AnalyzeMessagePayload,
+    } as unknown as Job;
+
+    const result = (await worker.processJob(mockJob)) as AnalyzeMessageResult;
+    expect(result.status).toBe('COMPLETED');
+    expect(result.messageId).toBe('msg-101');
+    expect(mockPrisma.message.update).toHaveBeenCalledWith({
+      where: { id: 'msg-101' },
+      data: { processingStatus: 'PROCESSING' },
+    });
+  });
+
+  it('should skip already analyzed message unless force is true', async () => {
+    const mockPrisma = {
+      message: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'msg-102',
+          processingStatus: 'COMPLETED',
+          analysis: { category: 'WORK', priority: 'HIGH' },
+        }),
+        update: jest.fn(),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+    const mockJob = {
+      id: 'job-msg-2',
+      name: JOB_ANALYZE_MESSAGE,
+      data: { messageId: 'msg-102', userId: 'user-1' } as AnalyzeMessagePayload,
+    } as unknown as Job;
+
+    const result = (await worker.processJob(mockJob)) as AnalyzeMessageResult;
+    expect(result.status).toBe('SKIPPED');
+    expect(result.category).toBe('WORK');
+    expect(result.priority).toBe('HIGH');
+    expect(mockPrisma.message.update).not.toHaveBeenCalled();
+  });
+
+  it('should return FAILED status when message is not found in database', async () => {
+    const mockPrisma = {
+      message: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+    const mockJob = {
+      id: 'job-msg-3',
+      name: JOB_ANALYZE_MESSAGE,
+      data: { messageId: 'msg-missing', userId: 'user-1' } as AnalyzeMessagePayload,
+    } as unknown as Job;
+
+    const result = (await worker.processJob(mockJob)) as AnalyzeMessageResult;
+    expect(result.status).toBe('FAILED');
+    expect(result.error).toContain('not found');
   });
 
   it('should handle unknown job gracefully without crashing', async () => {

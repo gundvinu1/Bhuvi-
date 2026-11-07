@@ -39,3 +39,17 @@ export interface ExecutePlanResult {
   totalSteps: number;
   error?: string;
 }
+
+export interface AnalyzeMessagePayload {
+  messageId: string;
+  userId: string;
+  force?: boolean;
+}
+
+export interface AnalyzeMessageResult {
+  messageId: string;
+  status: 'COMPLETED' | 'FAILED' | 'SKIPPED';
+  category?: string;
+  priority?: string;
+  error?: string;
+}
