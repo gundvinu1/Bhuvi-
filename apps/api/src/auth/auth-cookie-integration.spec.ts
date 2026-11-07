@@ -34,7 +34,7 @@ describe('Auth Cookie & Dual-Transport Integration', () => {
 
   const testUser = {
     name: 'Audit User',
-    email: 'audit.tester@example.com',
+    email: `audit.tester-${Date.now()}@example.com`,
     password: 'SecureAuditPassword123!',
   };
 

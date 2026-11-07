@@ -1,15 +1,31 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { APP_FULL_NAME, APP_NAME, ApiResponse, AuthResponseData, SafeUser } from '@bhuvi/shared';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [verifiedUser, setVerifiedUser] = useState<SafeUser | null>(null);
+
+  useEffect(() => {
+    if (verifiedUser) {
+      const timer = setTimeout(() => {
+        try {
+          router.push('/dashboard');
+        } catch {
+          // Ignore navigation errors in headless environments
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [verifiedUser, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,17 +167,26 @@ export default function LoginPage() {
                   /api/v1/auth/me
                 </div>
               </div>
-              <p className="text-xs text-gray-400">
-                Full dashboard and task center will be available in Module 04.
+              <p className="text-xs text-emerald-400 font-medium">
+                Redirecting to your dashboard...
               </p>
               <div className="pt-2 flex flex-col gap-2">
+                <Link
+                  href="/dashboard"
+                  className="w-full py-2.5 px-4 rounded-xl bhuvi-gradient hover:opacity-95 text-white font-semibold text-sm text-center shadow-lg transition"
+                >
+                  Proceed to Dashboard
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="w-full py-2.5 px-4 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-sm font-semibold transition"
                 >
                   Sign Out
                 </button>
-                <Link href="/" className="text-xs text-bhuvi-400 hover:text-bhuvi-300 transition">
+                <Link
+                  href="/"
+                  className="text-xs text-bhuvi-400 hover:text-bhuvi-300 transition text-center"
+                >
                   Return to Home
                 </Link>
               </div>

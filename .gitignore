@@ -48,3 +48,7 @@ coverage/
 # Prisma generated (future)
 prisma/generated/
 
+# Temporary directories
+tmp-chrome-profile/
+*.tmp
+

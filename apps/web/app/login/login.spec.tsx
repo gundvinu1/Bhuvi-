@@ -1,5 +1,16 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+
+const mockPush = jest.fn();
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: jest.fn(),
+    prefetch: jest.fn(),
+  }),
+  usePathname: () => '/login',
+}));
+
 import LoginPage from './page';
 
 describe('LoginPage', () => {

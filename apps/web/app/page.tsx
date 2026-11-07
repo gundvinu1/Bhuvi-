@@ -39,11 +39,18 @@ export default function HomePage() {
           </span>
         </div>
 
-        {/* Authentication Navigation */}
-        <div className="flex items-center justify-center gap-4 pt-1">
+        {/* Authentication & Dashboard Navigation */}
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+          <Link
+            href="/dashboard"
+            className="px-5 py-2.5 rounded-xl bhuvi-gradient hover:opacity-95 text-white font-semibold text-sm shadow-lg shadow-bhuvi-600/30 transition flex items-center gap-2"
+          >
+            <span>Open Dashboard</span>
+            <span className="text-xs">→</span>
+          </Link>
           <Link
             href="/login"
-            className="px-5 py-2.5 rounded-xl bhuvi-gradient hover:opacity-95 text-white font-semibold text-sm shadow-lg shadow-bhuvi-600/30 transition"
+            className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 font-semibold text-sm transition"
           >
             Sign In
           </Link>
@@ -58,11 +65,12 @@ export default function HomePage() {
         {/* Module roadmap preview */}
         <div className="glass-panel p-6 text-left space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-bhuvi-400">
-            Module 01 Active
+            Module 04 Active · Application Dashboard
           </h2>
           <p className="text-sm text-gray-400 leading-relaxed">
-            The project foundation has been established. Future modules will add AI brain
-            integration, email monitoring, natural language commands, voice interaction, and more.
+            The central operating system dashboard is active with responsive desktop and mobile
+            navigation, authenticated session management, real-time infrastructure status telemetry,
+            and extensible AI workspaces.
           </p>
           <div className="pt-2 flex flex-wrap gap-2">
             {['Next.js 14', 'NestJS', 'TypeScript', 'pnpm Workspaces', 'Tailwind CSS'].map(

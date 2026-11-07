@@ -80,4 +80,5 @@ pnpm db:studio       # Launch Prisma Studio data browser
 - **Module 01: Project Foundation & Environment Setup:** COMPLETE
 - **Module 02: Authentication & User Management:** COMPLETE (Dual-transport: HttpOnly cookie + Bearer token, rate limiting)
 - **Module 03: Database & Infrastructure:** COMPLETE (PostgreSQL 16, Prisma 5, Redis 7, BullMQ 5, persistent repository)
-- **Module 04: Application Dashboard:** PLANNED (Awaiting authorization)
+- **Module 04: Application Dashboard:** COMPLETE (Central AI OS interface, collapsible sidebar & drawer, personalized greeting, honest metric placeholders, /auth/me profile, live /health telemetry)
+- **Module 05: AI Brain & Model Integration:** PLANNED (Awaiting authorization)
