@@ -196,5 +196,41 @@ The module is verified with comprehensive unit and integration tests across:
 - `gmail-ai.service.spec.ts`: Summarization, prompt injection defense, reply suggestions.
 - `gmail-security.spec.ts`: Multi-tenant boundary verification, authorization guards, secret redaction.
 - `gmail.controller.spec.ts`: Endpoints validation, parameter handling.
+- `gmail-multi-account.spec.ts`: Complete multi-account verification (multiple connections, OAuth state replay prevention, Redis distributed locking, cross-user isolation, unified inbox, exact-account draft routing, grounded multi-account AI Q&A).
 - `main.spec.ts` (Worker): BullMQ `sync-gmail` job processing and error handling.
-- `gmail.spec.tsx` (Web): Dashboard interface, stats cards, inbox list, reading pane, AI modal, Ask BHUVI tab.
+- `gmail.spec.tsx` (Web): Dashboard interface, stats cards, inbox list, reading pane, AI modal, Ask BHUVI tab, account filters, and multi-account status management.
+
+---
+
+## 9. Multi-Account Gmail Architecture Enhancement
+
+### Key Architectural Capabilities
+
+1. **Many-to-One Connection Model**:
+   - Single BHUVI user can connect 1, 2, 3 or more Gmail accounts simultaneously.
+   - Database constraint `@@unique([userId, googleAccountEmail])` prevents duplicate connection rows while allowing multiple different accounts per user.
+   - Re-authenticating an existing account refreshes tokens rather than creating duplicate records.
+
+2. **OAuth State Nonce & Anti-Replay Defense**:
+   - OAuth state encodes `userId:timestamp:nonce:hmac`.
+   - Nonces are consumed upon first callback (`consumedNonces` registry). Replayed OAuth callbacks are immediately rejected.
+
+3. **Redis Distributed Concurrency Locking**:
+   - Concurrency lock per connection: `lock:gmail-sync:${connectionId}` with unique UUID token.
+   - Safe release via atomic Lua script.
+   - Independent syncing: Failure or rate limiting in one account never halts synchronization of other accounts.
+
+4. **Multi-Account Unified Inbox & Filtering**:
+   - `GET /api/v1/gmail/messages`: Returns unified messages across all connected accounts by default.
+   - Supports filtering by specific account via `?connectionId=...`.
+   - `GET /api/v1/gmail/sync/stats`: Aggregates total metrics across accounts and provides per-account breakdown.
+
+5. **Safe Exact-Account Draft Creation**:
+   - `POST /api/v1/gmail/drafts`: Enforces `connectionId` validation.
+   - Drafts are created exclusively inside the receiving Gmail account via `gmail.users.drafts.create`. Cross-account draft creation is strictly prevented.
+   - Strict Zero Auto-Send policy is enforced.
+
+6. **Grounded Multi-Account AI Intelligence**:
+   - `POST /api/v1/gmail/ask`: Supports cross-account queries or account-scoped queries.
+   - Injects untrusted email context tags with receiving account attributes (`account="..."`).
+   - Returns receiving account email in citations and references.

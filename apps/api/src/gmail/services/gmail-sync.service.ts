@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleDestroy } from '@nestjs/common';
 import { google } from 'googleapis';
 import * as crypto from 'crypto';
 import { Prisma, PrismaService } from '@bhuvi/database';
@@ -13,13 +13,20 @@ import {
   MessageCategory,
   MessagePriority,
   MessageUrgency,
+  GmailConnectionStatus,
 } from '@bhuvi/shared';
-import { createDefaultQueue, enqueueSyncGmail } from '@bhuvi/queue';
+import {
+  createDefaultQueue,
+  enqueueSyncGmail,
+  Redis,
+  getRedisConnectionOptions,
+} from '@bhuvi/queue';
 
 @Injectable()
-export class GmailSyncService {
+export class GmailSyncService implements OnModuleDestroy {
   private readonly logger = new Logger(GmailSyncService.name);
   private readonly activeSyncs = new Set<string>();
+  private redisClient: Redis | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -27,6 +34,82 @@ export class GmailSyncService {
     private readonly emailParser: EmailParserService,
     private readonly messageIntelligence: MessageIntelligenceService,
   ) {}
+
+  private getRedisClient(): Redis | null {
+    if (this.redisClient) return this.redisClient;
+    try {
+      const opts = getRedisConnectionOptions();
+      const host = opts.host === 'localhost' ? '127.0.0.1' : opts.host;
+      this.redisClient = new Redis({
+        host,
+        port: opts.port,
+        password: opts.password,
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+        connectTimeout: 2000,
+        enableOfflineQueue: false,
+      });
+      return this.redisClient;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Acquires Redis distributed lock for syncing a specific Gmail connection.
+   */
+  async acquireSyncLock(connectionId: string, lockVal: string, ttlSeconds = 120): Promise<boolean> {
+    const redis = this.getRedisClient();
+    if (!redis) return true; // Graceful fallback to in-memory set
+    try {
+      if (redis.status === 'wait') {
+        await redis.connect();
+      }
+      const res = await redis.set(
+        `lock:gmail-sync:${connectionId}`,
+        lockVal,
+        'EX',
+        ttlSeconds,
+        'NX',
+      );
+      return res === 'OK';
+    } catch (err: unknown) {
+      this.logger.warn(
+        `Redis lock check failed, relying on memory lock: ${(err as Error).message}`,
+      );
+      return true;
+    }
+  }
+
+  /**
+   * Releases Redis distributed lock using atomic Lua script.
+   */
+  async releaseSyncLock(connectionId: string, lockVal: string): Promise<void> {
+    const redis = this.getRedisClient();
+    if (!redis || redis.status !== 'ready') return;
+    try {
+      const lua = `
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+          return redis.call("del", KEYS[1])
+        else
+          return 0
+        end
+      `;
+      await redis.eval(lua, 1, `lock:gmail-sync:${connectionId}`, lockVal);
+    } catch {
+      // Ignore cleanup error on shutdown
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.redisClient) {
+      try {
+        await this.redisClient.quit();
+      } catch {
+        // Ignore disconnect error
+      }
+    }
+  }
 
   /**
    * Attempts to enqueue a BullMQ background sync job.
@@ -44,29 +127,79 @@ export class GmailSyncService {
   }
 
   /**
-   * Performs inbox synchronization (initial or incremental) for a connected Gmail account.
+   * Performs inbox synchronization for a specific Gmail connection or all connected accounts.
    */
   async syncInbox(
     userId: string,
     connectionId?: string,
     maxMessages = 50,
   ): Promise<{ syncedCount: number; historyId?: string }> {
-    // 1. Identify active Gmail connection for user
-    const connection = connectionId
-      ? await this.prisma.gmailConnection.findUnique({ where: { id: connectionId } })
-      : await this.prisma.gmailConnection.findFirst({
-          where: { userId, connectionStatus: { in: ['CONNECTED', 'REQUIRES_REAUTH'] } },
-          orderBy: { updatedAt: 'desc' },
-        });
+    if (connectionId) {
+      const connection = await this.prisma.gmailConnection.findUnique({
+        where: { id: connectionId },
+      });
 
-    if (!connection || connection.userId !== userId) {
-      throw new NotFoundException('Active Gmail connection not found for user.');
+      if (!connection || connection.userId !== userId) {
+        throw new NotFoundException('Active Gmail connection not found for user.');
+      }
+
+      return this.syncSingleConnection(userId, connection, maxMessages);
     }
 
-    // 2. Concurrency protection: prevent overlapping syncs per account
+    // Sync all connected accounts for user independently
+    const connections = await this.prisma.gmailConnection.findMany({
+      where: {
+        userId,
+        connectionStatus: { in: ['CONNECTED', 'REQUIRES_REAUTH'] },
+      },
+    });
+
+    if (connections.length === 0) {
+      throw new NotFoundException('No active Gmail connections found for user.');
+    }
+
+    let totalSynced = 0;
+    let lastHistory: string | undefined;
+
+    for (const conn of connections) {
+      try {
+        const res = await this.syncSingleConnection(userId, conn, maxMessages);
+        totalSynced += res.syncedCount;
+        if (res.historyId) {
+          lastHistory = res.historyId;
+        }
+      } catch (err: unknown) {
+        // Individual account failure must not block remaining accounts
+        this.logger.error(
+          `Failed to sync account [${conn.googleAccountEmail}] (${conn.id}): ${(err as Error).message}`,
+        );
+      }
+    }
+
+    return { syncedCount: totalSynced, historyId: lastHistory };
+  }
+
+  /**
+   * Synchronizes an individual Gmail connection with Redis distributed lock.
+   */
+  private async syncSingleConnection(
+    userId: string,
+    connection: { id: string; lastHistoryId?: string | null; googleAccountEmail: string },
+    maxMessages = 50,
+  ): Promise<{ syncedCount: number; historyId?: string }> {
+    // 1. In-memory & Redis distributed concurrency check
     if (this.activeSyncs.has(connection.id)) {
       this.logger.warn(
-        `Sync already in progress for connection [${connection.id}]. Skipping duplicate trigger.`,
+        `Sync already in progress in-memory for connection [${connection.id}]. Skipping duplicate trigger.`,
+      );
+      return { syncedCount: 0, historyId: connection.lastHistoryId || undefined };
+    }
+
+    const lockVal = crypto.randomUUID();
+    const hasLock = await this.acquireSyncLock(connection.id, lockVal, 180);
+    if (!hasLock) {
+      this.logger.warn(
+        `Distributed sync lock already held for connection [${connection.id}]. Skipping duplicate trigger.`,
       );
       return { syncedCount: 0, historyId: connection.lastHistoryId || undefined };
     }
@@ -74,7 +207,7 @@ export class GmailSyncService {
     this.activeSyncs.add(connection.id);
     const syncStart = new Date();
 
-    // 3. Record sync state IN_PROGRESS
+    // 2. Record sync state IN_PROGRESS
     const syncState = await this.prisma.gmailSyncState.create({
       data: {
         userId,
@@ -92,12 +225,12 @@ export class GmailSyncService {
       let syncedCount = 0;
       let targetMessageIds: string[] = [];
 
-      // 4. Determine sync mode: incremental via historyId or initial recent messages
+      // 3. Determine sync mode: incremental via historyId or initial recent messages
       let usedHistory = false;
       if (connection.lastHistoryId) {
         try {
           this.logger.log(
-            `Attempting incremental sync with startHistoryId [${connection.lastHistoryId}] for connection [${connection.id}]`,
+            `Attempting incremental sync with startHistoryId [${connection.lastHistoryId}] for connection [${connection.id}] (${connection.googleAccountEmail})`,
           );
           const historyRes = await gmail.users.history.list({
             userId: 'me',
@@ -141,7 +274,7 @@ export class GmailSyncService {
         targetMessageIds = msgs.map((m) => m.id!).filter(Boolean);
       }
 
-      // 5. Fetch, parse, and persist each message
+      // 4. Fetch, parse, and persist each message
       for (const msgId of targetMessageIds) {
         // Check if message is already stored in DB to guarantee idempotency
         const existing = await this.prisma.gmailMessage.findUnique({
@@ -207,8 +340,7 @@ export class GmailSyncService {
             return gm;
           });
 
-          // 6. Module 07 Message Intelligence Integration
-          // Ingest email into Message entity and analyze with existing intelligence engine
+          // 5. Module 07 Message Intelligence Integration
           try {
             const contentHash = crypto
               .createHash('sha256')
@@ -248,7 +380,7 @@ export class GmailSyncService {
         }
       }
 
-      // 7. Update latest history ID from profile
+      // 6. Update latest history ID from profile
       let latestHistoryId = connection.lastHistoryId;
       try {
         const profile = await gmail.users.getProfile({ userId: 'me' });
@@ -259,7 +391,7 @@ export class GmailSyncService {
         // Fallback to existing history ID
       }
 
-      // 8. Update connection and sync state
+      // 7. Update connection and sync state
       await this.prisma.gmailConnection.update({
         where: { id: connection.id },
         data: {
@@ -280,7 +412,7 @@ export class GmailSyncService {
       });
 
       this.logger.log(
-        `Sync completed for connection [${connection.id}]. Synced ${syncedCount} new messages.`,
+        `Sync completed for connection [${connection.id}] (${connection.googleAccountEmail}). Synced ${syncedCount} new messages.`,
       );
 
       return { syncedCount, historyId: latestHistoryId || undefined };
@@ -306,11 +438,12 @@ export class GmailSyncService {
       throw syncErr;
     } finally {
       this.activeSyncs.delete(connection.id);
+      await this.releaseSyncLock(connection.id, lockVal);
     }
   }
 
   /**
-   * Queries paginated synchronized Gmail messages with filtering.
+   * Queries paginated synchronized Gmail messages with filtering and multi-account support.
    */
   async getMessages(
     userId: string,
@@ -322,6 +455,7 @@ export class GmailSyncService {
 
     const where: Prisma.GmailMessageWhereInput = {
       userId,
+      ...(query.connectionId ? { gmailConnectionId: query.connectionId } : {}),
       ...(query.unreadOnly ? { isRead: false } : {}),
       ...(query.search
         ? {
@@ -354,6 +488,9 @@ export class GmailSyncService {
         take: limit,
         orderBy: { receivedAt: 'desc' },
         include: {
+          connection: {
+            select: { googleAccountEmail: true },
+          },
           attachments: true,
           message: {
             include: {
@@ -369,6 +506,7 @@ export class GmailSyncService {
       id: m.id,
       userId: m.userId,
       gmailConnectionId: m.gmailConnectionId,
+      accountEmail: m.connection?.googleAccountEmail,
       providerMessageId: m.providerMessageId,
       providerThreadId: m.providerThreadId,
       senderName: m.senderName,
@@ -414,8 +552,8 @@ export class GmailSyncService {
         downloadStatus: att.downloadStatus as any,
         createdAt: att.createdAt.toISOString(),
       })),
-      createdAt: m.createdAt.toISOString(),
-      updatedAt: m.updatedAt.toISOString(),
+      createdAt: m.createdAt ? m.createdAt.toISOString() : new Date().toISOString(),
+      updatedAt: m.updatedAt ? m.updatedAt.toISOString() : new Date().toISOString(),
     }));
 
     return {
@@ -434,6 +572,9 @@ export class GmailSyncService {
     const m = await this.prisma.gmailMessage.findUnique({
       where: { id },
       include: {
+        connection: {
+          select: { googleAccountEmail: true },
+        },
         attachments: true,
         message: {
           include: {
@@ -452,6 +593,7 @@ export class GmailSyncService {
       id: m.id,
       userId: m.userId,
       gmailConnectionId: m.gmailConnectionId,
+      accountEmail: m.connection?.googleAccountEmail,
       providerMessageId: m.providerMessageId,
       providerThreadId: m.providerThreadId,
       senderName: m.senderName,
@@ -497,8 +639,8 @@ export class GmailSyncService {
         downloadStatus: att.downloadStatus as any,
         createdAt: att.createdAt.toISOString(),
       })),
-      createdAt: m.createdAt.toISOString(),
-      updatedAt: m.updatedAt.toISOString(),
+      createdAt: m.createdAt ? m.createdAt.toISOString() : new Date().toISOString(),
+      updatedAt: m.updatedAt ? m.updatedAt.toISOString() : new Date().toISOString(),
     };
   }
 
@@ -513,6 +655,9 @@ export class GmailSyncService {
       },
       orderBy: { receivedAt: 'asc' },
       include: {
+        connection: {
+          select: { googleAccountEmail: true },
+        },
         attachments: true,
         message: {
           include: { analysis: true },
@@ -524,6 +669,7 @@ export class GmailSyncService {
       id: m.id,
       userId: m.userId,
       gmailConnectionId: m.gmailConnectionId,
+      accountEmail: m.connection?.googleAccountEmail,
       providerMessageId: m.providerMessageId,
       providerThreadId: m.providerThreadId,
       senderName: m.senderName,
@@ -542,15 +688,20 @@ export class GmailSyncService {
       messageId: m.messageId,
       analysis: m.message?.analysis as any,
       attachments: m.attachments as any,
-      createdAt: m.createdAt.toISOString(),
-      updatedAt: m.updatedAt.toISOString(),
+      createdAt: m.createdAt ? m.createdAt.toISOString() : new Date().toISOString(),
+      updatedAt: m.updatedAt ? m.updatedAt.toISOString() : new Date().toISOString(),
     }));
   }
 
   /**
-   * Computes synchronized email statistics for user.
+   * Computes synchronized email statistics for user across all accounts or for a specific account.
    */
-  async getSyncStats(userId: string): Promise<GmailSyncStatsDto> {
+  async getSyncStats(userId: string, connectionId?: string): Promise<GmailSyncStatsDto> {
+    const whereBase: Prisma.GmailMessageWhereInput = {
+      userId,
+      ...(connectionId ? { gmailConnectionId: connectionId } : {}),
+    };
+
     const [
       totalEmails,
       unreadEmails,
@@ -559,12 +710,13 @@ export class GmailSyncService {
       requiresActionCount,
       connection,
       latestSyncState,
+      allConnections,
     ] = await Promise.all([
-      this.prisma.gmailMessage.count({ where: { userId } }),
-      this.prisma.gmailMessage.count({ where: { userId, isRead: false } }),
+      this.prisma.gmailMessage.count({ where: whereBase }),
+      this.prisma.gmailMessage.count({ where: { ...whereBase, isRead: false } }),
       this.prisma.gmailMessage.count({
         where: {
-          userId,
+          ...whereBase,
           message: {
             analysis: {
               priority: { in: ['CRITICAL', 'HIGH'] },
@@ -574,7 +726,7 @@ export class GmailSyncService {
       }),
       this.prisma.gmailMessage.count({
         where: {
-          userId,
+          ...whereBase,
           message: {
             analysis: {
               requiresReply: true,
@@ -584,7 +736,7 @@ export class GmailSyncService {
       }),
       this.prisma.gmailMessage.count({
         where: {
-          userId,
+          ...whereBase,
           message: {
             analysis: {
               requiresAction: true,
@@ -592,15 +744,72 @@ export class GmailSyncService {
           },
         },
       }),
-      this.prisma.gmailConnection.findFirst({
-        where: { userId, connectionStatus: { in: ['CONNECTED', 'REQUIRES_REAUTH'] } },
-        orderBy: { updatedAt: 'desc' },
-      }),
+      connectionId
+        ? this.prisma.gmailConnection.findUnique({ where: { id: connectionId } })
+        : this.prisma.gmailConnection.findFirst({
+            where: { userId, connectionStatus: { in: ['CONNECTED', 'REQUIRES_REAUTH'] } },
+            orderBy: { updatedAt: 'desc' },
+          }),
       this.prisma.gmailSyncState.findFirst({
-        where: { userId },
+        where: {
+          userId,
+          ...(connectionId ? { gmailConnectionId: connectionId } : {}),
+        },
         orderBy: { createdAt: 'desc' },
       }),
+      this.prisma.gmailConnection.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: {
+            select: { messages: true },
+          },
+        },
+      }),
     ]);
+
+    const accountsBreakdown = await Promise.all(
+      (allConnections || []).map(async (conn) => {
+        const [unread, important, requiresAction] = await Promise.all([
+          this.prisma.gmailMessage.count({
+            where: { userId, gmailConnectionId: conn.id, isRead: false },
+          }),
+          this.prisma.gmailMessage.count({
+            where: {
+              userId,
+              gmailConnectionId: conn.id,
+              message: {
+                analysis: {
+                  priority: { in: ['CRITICAL', 'HIGH'] },
+                },
+              },
+            },
+          }),
+          this.prisma.gmailMessage.count({
+            where: {
+              userId,
+              gmailConnectionId: conn.id,
+              message: {
+                analysis: {
+                  requiresAction: true,
+                },
+              },
+            },
+          }),
+        ]);
+
+        return {
+          connectionId: conn.id,
+          googleAccountEmail: conn.googleAccountEmail,
+          connectionStatus: conn.connectionStatus as GmailConnectionStatus,
+          totalEmails: conn._count?.messages ?? 0,
+          unreadEmails: unread,
+          importantEmails: important,
+          requiresActionCount: requiresAction,
+          lastSyncedAt: conn.lastSyncedAt ? conn.lastSyncedAt.toISOString() : null,
+        };
+      }),
+    );
 
     return {
       totalEmails,
@@ -610,6 +819,7 @@ export class GmailSyncService {
       requiresActionCount,
       lastSyncedAt: connection?.lastSyncedAt?.toISOString() ?? null,
       syncStatus: (latestSyncState?.syncStatus as any) || 'IDLE',
+      accounts: accountsBreakdown,
     };
   }
 }

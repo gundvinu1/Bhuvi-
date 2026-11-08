@@ -18,8 +18,10 @@ export function getRedisConnectionOptions(): RedisConfigOptions {
   if (redisUrl) {
     try {
       const parsed = new URL(redisUrl);
+      const host =
+        parsed.hostname === 'localhost' || !parsed.hostname ? '127.0.0.1' : parsed.hostname;
       return {
-        host: parsed.hostname || 'localhost',
+        host,
         port: parsed.port ? parseInt(parsed.port, 10) : 6379,
         password: parsed.password || undefined,
         maxRetriesPerRequest: null,
@@ -31,7 +33,8 @@ export function getRedisConnectionOptions(): RedisConfigOptions {
     }
   }
 
-  const host = process.env['REDIS_HOST'] || 'localhost';
+  const rawHost = process.env['REDIS_HOST'] || '127.0.0.1';
+  const host = rawHost === 'localhost' ? '127.0.0.1' : rawHost;
   const port = parseInt(process.env['REDIS_PORT'] || '6379', 10);
   const password = process.env['REDIS_PASSWORD'] || undefined;
 

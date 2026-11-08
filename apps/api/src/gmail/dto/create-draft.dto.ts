@@ -18,4 +18,8 @@ export class CreateDraftDto {
   @IsOptional()
   @IsString({ message: 'Thread ID must be a string' })
   threadId?: string;
+
+  @IsOptional()
+  @IsString({ message: 'Connection ID must be a string' })
+  connectionId?: string;
 }

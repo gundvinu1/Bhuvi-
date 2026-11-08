@@ -99,7 +99,9 @@ export class GmailDraftService {
         throw new Error('Google did not return a draft ID.');
       }
 
-      this.logger.log(`Draft created successfully with ID [${draftId}]`);
+      this.logger.log(
+        `Draft created successfully with ID [${draftId}] in account [${connection.googleAccountEmail}]`,
+      );
 
       return {
         draftId,
@@ -107,6 +109,8 @@ export class GmailDraftService {
         threadId: res.data.message?.threadId || dto.threadId || undefined,
         to: dto.to,
         subject: dto.subject,
+        accountEmail: connection.googleAccountEmail,
+        connectionId: connection.id,
       };
     } catch (err: unknown) {
       this.logger.error(`Failed to create Gmail draft: ${(err as Error).message}`);

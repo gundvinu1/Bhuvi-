@@ -36,4 +36,8 @@ export class QueryGmailDto {
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   importantOnly?: boolean;
+
+  @IsOptional()
+  @IsString()
+  connectionId?: string;
 }

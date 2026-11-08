@@ -157,3 +157,24 @@ GMAIL_SYNC_BATCH_SIZE=50
    - Click **Summarize** for quick AI insights.
    - Click **Suggest Reply** to generate contextual draft responses (Formal, Friendly, Concise).
    - Click **Save as Draft to Gmail** to push the draft safely into your official Gmail Drafts folder without auto-sending.
+
+---
+
+## 6. Multi-Account Gmail Management
+
+BHUVI supports connecting multiple Gmail accounts simultaneously under a single BHUVI user:
+
+1. **Connect Additional Accounts**:
+   - On the Gmail Dashboard (`/dashboard/gmail`), click **"+ Connect Another Account"**.
+   - Google OAuth prompts with `prompt: 'consent select_account'`, allowing you to choose any secondary or work account without logging out of your primary account.
+   - Each connection receives an independent `connectionId` and its own encrypted token pair.
+2. **Unified Inbox vs. Account Filtering**:
+   - The default inbox view combines messages across all connected accounts, showing receiving account badges (`alice.personal@gmail.com`, `work@company.com`).
+   - Use the **Account Filter** dropdown to isolate emails for a specific account.
+3. **Independent Synchronization & Redis Concurrency**:
+   - Each account synchronizes independently using distributed locking (`lock:gmail-sync:${connectionId}`).
+   - An issue or quota limit with one account will never disrupt or block synchronization for other accounts.
+4. **Selective Account Disconnection**:
+   - Each account card includes its own **Disconnect** action, allowing you to disconnect a specific account while keeping all other connected accounts active.
+5. **Exact-Account Safe Drafts**:
+   - Draft replies are created strictly in the receiving Gmail account via `gmail.users.drafts.create`. Cross-account draft creation is disallowed.

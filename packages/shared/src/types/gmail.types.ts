@@ -31,6 +31,7 @@ export interface GmailMessageDto {
   id: string;
   userId: string;
   gmailConnectionId: string;
+  accountEmail?: string;
   providerMessageId: string;
   providerThreadId: string;
   senderName?: string | null;
@@ -83,6 +84,17 @@ export interface GmailSyncStateDto {
   updatedAt: string;
 }
 
+export interface GmailAccountStatDto {
+  connectionId: string;
+  googleAccountEmail: string;
+  connectionStatus: GmailConnectionStatus;
+  totalEmails: number;
+  unreadEmails: number;
+  importantEmails: number;
+  requiresActionCount: number;
+  lastSyncedAt?: string | null;
+}
+
 export interface GmailSyncStatsDto {
   totalEmails: number;
   unreadEmails: number;
@@ -91,6 +103,7 @@ export interface GmailSyncStatsDto {
   requiresActionCount: number;
   lastSyncedAt?: string | null;
   syncStatus: GmailSyncStatus;
+  accounts?: GmailAccountStatDto[];
 }
 
 export interface GmailSuggestedReplyDto {
@@ -107,6 +120,7 @@ export interface GmailCreateDraftDto {
   subject: string;
   body: string;
   threadId?: string;
+  connectionId?: string;
 }
 
 export interface GmailDraftCreatedResult {
@@ -115,6 +129,8 @@ export interface GmailDraftCreatedResult {
   threadId?: string;
   to: string;
   subject: string;
+  accountEmail?: string;
+  connectionId?: string;
 }
 
 export interface GmailConnectUrlResponse {
@@ -141,6 +157,12 @@ export interface QueryGmailMessagesDto {
   priority?: string;
   unreadOnly?: boolean;
   importantOnly?: boolean;
+  connectionId?: string;
+}
+
+export interface AskGmailEmailsDto {
+  question: string;
+  connectionId?: string;
 }
 
 export interface PaginatedGmailMessagesResponse {

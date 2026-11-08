@@ -29,7 +29,7 @@
 | 06  | AI Agent Orchestrator                  | ✅ **COMPLETE** | 4 logical agents (Planning, Research, Communication, Task), IntentAnalyzer, PlannerService (cycle detection), ExecutionEngine, Human Approval boundary, Web UI, worker |
 | 07  | Message Intelligence Engine            | ✅ **COMPLETE** | Classification, summarization, priority & urgency, action items, duplicate detection, prompt injection guard, web UI, worker integration                               |
 | 08  | Personal Memory & Knowledge            | ✅ **COMPLETE** | Local embeddings via `nomic-embed-text` (768-dim), native PostgreSQL vector storage, cosine similarity search, grounded RAG with source citations, web UI, worker sync |
-| 09  | Gmail Integration                      | ✅ **COMPLETE** | Official Google OAuth 2.0, AES-256-GCM token encryption, BullMQ inbox sync, MIME parsing, Module 07 intelligence, safe drafts, web UI, RAG Q&A                         |
+| 09  | Gmail Integration                      | ✅ **COMPLETE** | Multi-account support (connect 3+ accounts), AES-256-GCM token encryption, Redis distributed locking, BullMQ sync, safe drafts, unified inbox, web UI, RAG Q&A         |
 | 10  | WhatsApp Integration                   | 📋 Planned      | Awaiting Module 07                                                                                                                                                     |
 | 11  | Social Media Integrations              | 📋 Planned      | Awaiting Module 07                                                                                                                                                     |
 | 12  | Calendar & Task Management             | 📋 Planned      | Awaiting Module 03                                                                                                                                                     |
@@ -227,27 +227,29 @@ pnpm test          → PASS (25 suites, 130 tests passed across monorepo)
 
 ---
 
-## Module 09 — Gmail Integration Acceptance & Implementation Criteria
+## Module 09 — Gmail Integration & Multi-Account Management Acceptance Criteria
 
 ### ✅ All Audit & Implementation Criteria Met
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Official Google OAuth 2.0 Auth Code Flow | ✅ | `GmailOAuthService` with HMAC-SHA256 signed `state` validation, 15-min expiry, Google API code exchange |
+| Multi-Account Gmail Support (3+ Accounts) | ✅ | Verified by `gmail-multi-account.spec.ts`: Single BHUVI user connects 3+ independent Gmail accounts with individual tokens and IDs |
+| Official Google OAuth 2.0 & Replay Defense | ✅ | HMAC-SHA256 signed `state` with unique random nonces consumed upon first callback (`consumedNonces` registry); replayed states rejected |
 | AES-256-GCM Authenticated Encryption | ✅ | `TokenEncryptionService` with cryptographically random 12-byte IV and 16-byte auth tag; plain tokens never logged or sent to frontend |
-| Strict Read & Draft Scopes (No Auto-Send) | ✅ | Minimum scopes `openid`, `email`, `gmail.readonly`, `gmail.compose`; compose strictly creates drafts via `gmail.users.drafts.create` |
+| Strict Read & Draft Scopes (No Auto-Send) | ✅ | Minimum scopes `openid`, `email`, `gmail.readonly`, `gmail.compose`; draft creation strictly routed to receiving account via `gmail.users.drafts.create` |
+| Redis Distributed Concurrency Locking | ✅ | Connection-specific Redis lock (`lock:gmail-sync:${connectionId}`) with atomic Lua script release; failure in one account never halts others |
 | Safe MIME & Email Parsing | ✅ | `EmailParserService` decodes Base64URL, RFC 2822 headers, neutralizes directory traversal in attachments, strips HTML |
 | Background Inbox Synchronization | ✅ | BullMQ `sync-gmail` queue, `GmailSyncService` incremental sync via `historyId`, per-account concurrency locks |
 | Module 07 Intelligence Integration | ✅ | Automatically classifies, summarizes, prioritizes, and extracts action items via `MessageIntelligenceService` |
-| Email AI & Contextual Suggested Replies | ✅ | `GmailAiService` generates tailored replies across 3 tones, email summarization, and RAG Q&A with `<untrusted_email_content>` delimiters |
-| Multi-Tenant Isolation & Cascade Deletion | ✅ | All queries enforce user boundary; disconnecting wipes tokens and cascades deletion of messages, attachments, sync states |
-| Full Web Dashboard Experience | ✅ | `apps/web/app/dashboard/gmail/page.tsx` with connection banner, 4 stats cards, inbox list, reading pane, reply modal, Ask BHUVI tab |
-| Comprehensive Quality Gates | ✅ | 47/47 API tests passed, 19/19 Worker tests passed, 42/42 Web tests passed |
+| Unified Inbox & Account Filtering | ✅ | Unified inbox combines messages across accounts by default with account badges; dynamic dropdown filters to selected account |
+| Multi-Account AI Intelligence & Grounded Q&A | ✅ | Grounded email Q&A across all accounts or scoped to a selected account; account attributes embedded in untrusted delimiters |
+| Multi-Tenant Isolation & Selective Disconnect | ✅ | Verified cross-user isolation: User B cannot access, sync, or disconnect User A's connections; selective per-account disconnection |
+| Comprehensive Quality Gates | ✅ | 62/62 Gmail API tests passed, 326/326 Total API tests passed, 19/19 Worker tests passed, 45/45 Web tests passed; 0 failures |
 
 ---
 
 ## Next Steps
 
-> 🛑 **Module 09 implementation & verification are COMPLETE. Awaiting user review and explicit approval before starting Module 10 (WhatsApp Integration).**
+> 🛑 **Module 09 implementation & multi-account enhancement are COMPLETE. Awaiting user review and explicit approval before starting Module 10 (WhatsApp Integration).**
 
 ```

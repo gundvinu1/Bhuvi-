@@ -8,6 +8,7 @@ import {
 import { google } from 'googleapis';
 import * as crypto from 'crypto';
 import { PrismaService } from '@bhuvi/database';
+import { GmailConnectionDto, GmailConnectionStatus } from '@bhuvi/shared';
 import { TokenEncryptionService } from './token-encryption.service';
 
 export type OAuth2Client = InstanceType<typeof google.auth.OAuth2>;
@@ -49,6 +50,20 @@ export class GmailOAuthService {
     return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
   }
 
+  private readonly consumedNonces = new Map<string, number>();
+
+  /**
+   * Cleans up expired nonces.
+   */
+  private cleanExpiredNonces(): void {
+    const now = Date.now();
+    for (const [nonce, expiry] of this.consumedNonces.entries()) {
+      if (now > expiry) {
+        this.consumedNonces.delete(nonce);
+      }
+    }
+  }
+
   /**
    * Generates secure signed state token encoding userId, timestamp, and HMAC signature.
    * State format: `userId:timestamp:signature`
@@ -64,8 +79,9 @@ export class GmailOAuthService {
 
   /**
    * Validates state parameter and extracts the authenticated userId.
+   * If consume=true, marks the nonce as used to prevent replay attacks.
    */
-  validateState(state: string): { valid: boolean; userId?: string } {
+  validateState(state: string, consume = false): { valid: boolean; userId?: string } {
     if (!state) return { valid: false };
 
     try {
@@ -75,9 +91,18 @@ export class GmailOAuthService {
 
       const [userId, timestampStr, nonce, receivedHmac] = parts as [string, string, string, string];
       const ts = parseInt(timestampStr, 10);
+      const now = Date.now();
       // State valid for 15 minutes (900,000 ms)
-      if (isNaN(ts) || Date.now() - ts > 15 * 60 * 1000) {
+      if (isNaN(ts) || now - ts > 15 * 60 * 1000) {
         this.logger.warn(`OAuth state expired for user [${userId}]`);
+        return { valid: false };
+      }
+
+      this.cleanExpiredNonces();
+      if (this.consumedNonces.has(nonce)) {
+        this.logger.warn(
+          `OAuth state replay attempted for user [${userId}]. Nonce already consumed.`,
+        );
         return { valid: false };
       }
 
@@ -90,6 +115,10 @@ export class GmailOAuthService {
         return { valid: false };
       }
 
+      if (consume) {
+        this.consumedNonces.set(nonce, ts + 15 * 60 * 1000);
+      }
+
       return { valid: true, userId };
     } catch (err: unknown) {
       this.logger.warn(`Failed to parse OAuth state: ${(err as Error).message}`);
@@ -99,6 +128,7 @@ export class GmailOAuthService {
 
   /**
    * Generates Google OAuth consent URL.
+   * Uses prompt='consent select_account' to allow connecting multiple Google accounts.
    */
   getConnectUrl(userId: string): { url: string; state: string } {
     if (!this.isConfigured()) {
@@ -116,7 +146,7 @@ export class GmailOAuthService {
     const url = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: configuredScopes,
-      prompt: 'consent',
+      prompt: 'consent select_account',
       state,
     });
 
@@ -130,7 +160,7 @@ export class GmailOAuthService {
     code: string,
     state: string,
   ): Promise<{ connectionId: string; email: string }> {
-    const { valid, userId } = this.validateState(state);
+    const { valid, userId } = this.validateState(state, true);
     if (!valid || !userId) {
       throw new BadRequestException('Invalid or expired OAuth state parameter.');
     }
@@ -278,12 +308,78 @@ export class GmailOAuthService {
   }
 
   /**
+   * Lists all Gmail connections for a user.
+   */
+  async getConnections(userId: string): Promise<GmailConnectionDto[]> {
+    const connections = await this.prisma.gmailConnection.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return connections.map((c) => ({
+      id: c.id,
+      userId: c.userId,
+      googleAccountEmail: c.googleAccountEmail,
+      googleAccountId: c.googleAccountId,
+      connectionStatus: c.connectionStatus as GmailConnectionStatus,
+      scopes: c.scopes,
+      lastSyncedAt: c.lastSyncedAt ? c.lastSyncedAt.toISOString() : null,
+      createdAt: c.createdAt.toISOString(),
+      updatedAt: c.updatedAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Retrieves a specific Gmail connection for a user.
+   */
+  async getConnection(userId: string, connectionId: string): Promise<GmailConnectionDto> {
+    const connection = await this.prisma.gmailConnection.findUnique({
+      where: { id: connectionId },
+    });
+
+    if (!connection || connection.userId !== userId) {
+      throw new NotFoundException('Gmail connection not found or unauthorized.');
+    }
+
+    return {
+      id: connection.id,
+      userId: connection.userId,
+      googleAccountEmail: connection.googleAccountEmail,
+      googleAccountId: connection.googleAccountId,
+      connectionStatus: connection.connectionStatus as GmailConnectionStatus,
+      scopes: connection.scopes,
+      lastSyncedAt: connection.lastSyncedAt ? connection.lastSyncedAt.toISOString() : null,
+      createdAt: connection.createdAt.toISOString(),
+      updatedAt: connection.updatedAt.toISOString(),
+    };
+  }
+
+  /**
    * Safely disconnects Gmail account: wipes tokens locally and marks status DISCONNECTED.
+   * If connectionId is provided, disconnects only that specific connection.
    */
   async disconnect(userId: string, connectionId?: string): Promise<{ disconnected: boolean }> {
-    const where = connectionId ? { id: connectionId, userId } : { userId };
+    if (connectionId) {
+      const conn = await this.prisma.gmailConnection.findUnique({
+        where: { id: connectionId },
+      });
+      if (!conn || conn.userId !== userId) {
+        throw new NotFoundException('Gmail connection not found or unauthorized.');
+      }
+      await this.prisma.gmailConnection.update({
+        where: { id: conn.id },
+        data: {
+          connectionStatus: 'DISCONNECTED',
+          encryptedAccessToken: '',
+          encryptedRefreshToken: null,
+          tokenExpiresAt: null,
+        },
+      });
+      this.logger.log(`Disconnected Gmail connection [${conn.id}] for user [${userId}]`);
+      return { disconnected: true };
+    }
 
-    const connections = await this.prisma.gmailConnection.findMany({ where });
+    const connections = await this.prisma.gmailConnection.findMany({ where: { userId } });
     if (connections.length === 0) {
       return { disconnected: true };
     }

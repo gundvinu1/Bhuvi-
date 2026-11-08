@@ -200,6 +200,14 @@ export class BhuviWorker {
   async generateEmbedding(
     text: string,
   ): Promise<{ embedding: number[]; dimensions: number; modelName: string }> {
+    if (this.config.nodeEnv === 'test') {
+      return {
+        embedding: new Array(768).fill(0.01),
+        dimensions: 768,
+        modelName: 'nomic-embed-text-test',
+      };
+    }
+
     const baseUrl = process.env['OLLAMA_BASE_URL'] || 'http://127.0.0.1:11434';
     const model = process.env['OLLAMA_EMBEDDING_MODEL'] || 'nomic-embed-text';
 

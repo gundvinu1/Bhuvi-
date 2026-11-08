@@ -11,6 +11,7 @@ const mockUseGmail = useGmail as jest.MockedFunction<typeof useGmail>;
 describe('Gmail Integration Dashboard Page', () => {
   const mockConnectGmail = jest.fn();
   const mockDisconnectGmail = jest.fn();
+  const mockDisconnectConnection = jest.fn();
   const mockTriggerSync = jest.fn();
   const mockSelectMessage = jest.fn();
   const mockSummarizeMessage = jest.fn();
@@ -18,16 +19,30 @@ describe('Gmail Integration Dashboard Page', () => {
   const mockCreateDraft = jest.fn();
   const mockAskAboutEmails = jest.fn();
   const mockSetFilters = jest.fn();
+  const mockSetSelectedConnectionId = jest.fn();
 
   const sampleConnection: GmailConnectionDto = {
     id: 'conn-1',
     userId: 'user-1',
     googleAccountEmail: 'tester@gmail.com',
+    googleAccountId: 'g-101',
     connectionStatus: 'CONNECTED',
-    scopes: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly'],
+    scopes: ['openid', 'email', 'gmail.readonly', 'gmail.compose'],
     lastSyncedAt: new Date('2026-11-08T08:00:00Z').toISOString(),
     createdAt: new Date('2026-11-08T07:00:00Z').toISOString(),
     updatedAt: new Date('2026-11-08T08:00:00Z').toISOString(),
+  };
+
+  const sampleConnection2: GmailConnectionDto = {
+    id: 'conn-2',
+    userId: 'user-1',
+    googleAccountEmail: 'college@university.edu',
+    googleAccountId: 'g-102',
+    connectionStatus: 'CONNECTED',
+    scopes: ['openid', 'email', 'gmail.readonly'],
+    lastSyncedAt: new Date('2026-11-08T08:15:00Z').toISOString(),
+    createdAt: new Date('2026-11-08T07:30:00Z').toISOString(),
+    updatedAt: new Date('2026-11-08T08:15:00Z').toISOString(),
   };
 
   const sampleStats: GmailSyncStatsDto = {
@@ -37,15 +52,16 @@ describe('Gmail Integration Dashboard Page', () => {
     requiresReplyCount: 1,
     requiresActionCount: 1,
     lastSyncedAt: new Date('2026-11-08T08:00:00Z').toISOString(),
-    syncStatus: 'SUCCESS',
+    syncStatus: 'IDLE',
   };
 
   const sampleEmail: GmailMessageDto = {
     id: 'msg-1',
     userId: 'user-1',
     gmailConnectionId: 'conn-1',
-    providerMessageId: 'p-1',
-    providerThreadId: 't-1',
+    accountEmail: 'tester@gmail.com',
+    providerMessageId: 'pmsg-1',
+    providerThreadId: 'pthread-1',
     senderName: 'Prof. Davis',
     senderEmail: 'davis@university.edu',
     recipientEmails: ['tester@gmail.com'],
@@ -83,7 +99,10 @@ describe('Gmail Integration Dashboard Page', () => {
     jest.clearAllMocks();
 
     mockUseGmail.mockReturnValue({
+      connections: [sampleConnection, sampleConnection2],
       connection: sampleConnection,
+      selectedConnectionId: null,
+      setSelectedConnectionId: mockSetSelectedConnectionId,
       stats: sampleStats,
       messages: [sampleEmail],
       activeMessage: sampleEmail,
@@ -97,8 +116,10 @@ describe('Gmail Integration Dashboard Page', () => {
       error: null,
       filters: {},
       setFilters: mockSetFilters,
+      loadConnections: jest.fn(),
       loadConnection: jest.fn(),
       connectGmail: mockConnectGmail,
+      disconnectConnection: mockDisconnectConnection,
       disconnectGmail: mockDisconnectGmail,
       triggerSync: mockTriggerSync,
       loadMessages: jest.fn(),
@@ -110,12 +131,13 @@ describe('Gmail Integration Dashboard Page', () => {
     });
   });
 
-  it('should render the Gmail dashboard header and connected account banner', () => {
+  it('should render the Gmail dashboard header and all connected account cards', () => {
     render(<GmailDashboardPage />);
 
     expect(screen.getByText('Gmail Integration')).toBeDefined();
     expect(screen.getAllByText('tester@gmail.com')[0]).toBeDefined();
-    expect(screen.getByText('CONNECTED')).toBeDefined();
+    expect(screen.getAllByText('college@university.edu')[0]).toBeDefined();
+    expect(screen.getAllByText('CONNECTED')[0]).toBeDefined();
   });
 
   it('should render email statistics correctly from database values', () => {
@@ -127,14 +149,15 @@ describe('Gmail Integration Dashboard Page', () => {
     expect(screen.getByText('1')).toBeDefined(); // Action Required
   });
 
-  it('should render synchronized email item in the inbox list', () => {
+  it('should render synchronized email item in the inbox list with account badge', () => {
     render(<GmailDashboardPage />);
 
-    expect(screen.getByText('Prof. Davis')).toBeDefined();
+    expect(screen.getAllByText('Prof. Davis')[0]).toBeDefined();
     expect(screen.getAllByText('Course Schedule & Task Deadline')[0]).toBeDefined();
+    expect(screen.getByText('tester')).toBeDefined(); // Account prefix badge
   });
 
-  it('should render active email details in the reading pane', () => {
+  it('should render active email details in the reading pane with account badge', () => {
     render(<GmailDashboardPage />);
 
     expect(
@@ -143,18 +166,53 @@ describe('Gmail Integration Dashboard Page', () => {
     expect(
       screen.getByText('Prof. Davis requests lab exercise submission by Friday 5 PM.'),
     ).toBeDefined();
+    expect(screen.getByText('Received in: tester@gmail.com')).toBeDefined();
   });
 
   it('should trigger inbox sync when Sync button is clicked', () => {
     render(<GmailDashboardPage />);
 
-    const syncButton = screen.getByRole('button', { name: /Sync Inbox/i });
+    const syncButton = screen.getByRole('button', { name: /Sync All Accounts/i });
     fireEvent.click(syncButton);
 
-    expect(mockTriggerSync).toHaveBeenCalledWith(50);
+    expect(mockTriggerSync).toHaveBeenCalledWith(50, null);
   });
 
-  it('should switch to Ask BHUVI tab and allow submitting questions', async () => {
+  it('should allow filtering by selecting an account from the account dropdown', () => {
+    render(<GmailDashboardPage />);
+
+    const select = screen.getByRole('combobox', { name: /Account Filter/i });
+    fireEvent.change(select, { target: { value: 'conn-2' } });
+
+    expect(mockSetSelectedConnectionId).toHaveBeenCalledWith('conn-2');
+  });
+
+  it('should allow connecting another account with the + Connect Another Account button', () => {
+    render(<GmailDashboardPage />);
+
+    const addBtn = screen.getByRole('button', { name: /\+ Connect Another Account/i });
+    fireEvent.click(addBtn);
+
+    expect(mockConnectGmail).toHaveBeenCalled();
+  });
+
+  it('should open disconnect modal for specific account and confirm disconnection', async () => {
+    render(<GmailDashboardPage />);
+
+    const disconnectBtns = screen.getAllByRole('button', { name: /^Disconnect$/i });
+    fireEvent.click(disconnectBtns[0]); // First account disconnect button
+
+    expect(screen.getByText('Disconnect Gmail Account?')).toBeDefined();
+
+    const confirmBtn = screen.getByRole('button', { name: /Disconnect This Account/i });
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
+
+    expect(mockDisconnectConnection).toHaveBeenCalledWith('conn-1');
+  });
+
+  it('should switch to Ask BHUVI tab and allow submitting questions across accounts', async () => {
     mockAskAboutEmails.mockResolvedValue({
       answer: 'Your latest email is from Prof. Davis regarding the lab deadline.',
       references: [
@@ -163,6 +221,7 @@ describe('Gmail Integration Dashboard Page', () => {
           subject: 'Course Schedule',
           sender: 'davis@university.edu',
           receivedAt: new Date().toISOString(),
+          accountEmail: 'tester@gmail.com',
         },
       ],
     });
@@ -182,6 +241,6 @@ describe('Gmail Integration Dashboard Page', () => {
       fireEvent.click(askBtn);
     });
 
-    expect(mockAskAboutEmails).toHaveBeenCalledWith('Summarize my latest email');
+    expect(mockAskAboutEmails).toHaveBeenCalledWith('Summarize my latest email', null);
   });
 });

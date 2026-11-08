@@ -114,6 +114,10 @@ describe('GmailOAuthService', () => {
 
   describe('disconnect', () => {
     it('should mark connection DISCONNECTED and wipe tokens', async () => {
+      (prisma.gmailConnection!.findUnique as jest.Mock).mockResolvedValue({
+        id: 'conn-1',
+        userId: 'user-1',
+      });
       (prisma.gmailConnection!.findMany as jest.Mock).mockResolvedValue([
         { id: 'conn-1', userId: 'user-1' },
       ]);

@@ -48,8 +48,45 @@ export class GmailController {
   ) {}
 
   // ============================================================
-  // OAuth & Connection Management
+  // OAuth & Multi-Account Connection Management
   // ============================================================
+
+  @UseGuards(JwtAuthGuard)
+  @Get('connections')
+  async getConnections(@CurrentUser() user: { id: string }): Promise<GmailConnectionDto[]> {
+    return this.oauthService.getConnections(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('connections/:id')
+  async getConnectionById(
+    @CurrentUser() user: { id: string },
+    @Param('id') id: string,
+  ): Promise<GmailConnectionDto> {
+    return this.oauthService.getConnection(user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('connections/:id/disconnect')
+  @HttpCode(HttpStatus.OK)
+  async disconnectConnection(
+    @CurrentUser() user: { id: string },
+    @Param('id') id: string,
+  ): Promise<{ disconnected: boolean }> {
+    return this.oauthService.disconnect(user.id, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('connections/:id/sync')
+  @HttpCode(HttpStatus.OK)
+  async syncConnection(
+    @CurrentUser() user: { id: string },
+    @Param('id') id: string,
+    @Query('max') max?: string,
+  ): Promise<{ syncedCount: number; historyId?: string }> {
+    const limit = max ? parseInt(max, 10) : 50;
+    return this.syncService.syncInbox(user.id, id, limit);
+  }
 
   @UseGuards(JwtAuthGuard)
   @Get('connection')
@@ -112,8 +149,13 @@ export class GmailController {
   @UseGuards(JwtAuthGuard)
   @Post('disconnect')
   @HttpCode(HttpStatus.OK)
-  async disconnect(@CurrentUser() user: { id: string }): Promise<{ disconnected: boolean }> {
-    return this.oauthService.disconnect(user.id);
+  async disconnect(
+    @CurrentUser() user: { id: string },
+    @Query('connectionId') connectionId?: string,
+  ): Promise<{ disconnected: boolean }> {
+    return connectionId !== undefined
+      ? this.oauthService.disconnect(user.id, connectionId)
+      : this.oauthService.disconnect(user.id);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -131,6 +173,18 @@ export class GmailController {
   @Post('sync')
   @HttpCode(HttpStatus.OK)
   async syncInbox(
+    @CurrentUser() user: { id: string },
+    @Query('max') max?: string,
+    @Query('connectionId') connectionId?: string,
+  ): Promise<{ syncedCount: number; historyId?: string }> {
+    const limit = max ? parseInt(max, 10) : 50;
+    return this.syncService.syncInbox(user.id, connectionId, limit);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('sync-all')
+  @HttpCode(HttpStatus.OK)
+  async syncAllAccounts(
     @CurrentUser() user: { id: string },
     @Query('max') max?: string,
   ): Promise<{ syncedCount: number; historyId?: string }> {
@@ -160,8 +214,11 @@ export class GmailController {
 
   @UseGuards(JwtAuthGuard)
   @Get('sync/stats')
-  async getSyncStats(@CurrentUser() user: { id: string }): Promise<GmailSyncStatsDto> {
-    return this.syncService.getSyncStats(user.id);
+  async getSyncStats(
+    @CurrentUser() user: { id: string },
+    @Query('connectionId') connectionId?: string,
+  ): Promise<GmailSyncStatsDto> {
+    return this.syncService.getSyncStats(user.id, connectionId);
   }
 
   // ============================================================
@@ -285,12 +342,33 @@ export class GmailController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('drafts')
+  @HttpCode(HttpStatus.CREATED)
+  async createDirectDraft(
+    @CurrentUser() user: { id: string },
+    @Body() dto: CreateDraftDto,
+  ): Promise<GmailDraftCreatedResult> {
+    let connectionId = dto.connectionId;
+    if (!connectionId) {
+      const activeConn = await this.prisma.gmailConnection.findFirst({
+        where: { userId: user.id, connectionStatus: 'CONNECTED' },
+        orderBy: { updatedAt: 'desc' },
+      });
+      if (!activeConn) {
+        throw new NotFoundException('No active Gmail connection found for user.');
+      }
+      connectionId = activeConn.id;
+    }
+    return this.draftService.createDraft(user.id, connectionId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('ask')
   @HttpCode(HttpStatus.OK)
   async askAboutEmails(
     @CurrentUser() user: { id: string },
     @Body() dto: AskEmailsDto,
   ): Promise<{ answer: string; references: any[] }> {
-    return this.aiService.askAboutEmails(user.id, dto.question);
+    return this.aiService.askAboutEmails(user.id, dto.question, dto.connectionId);
   }
 }

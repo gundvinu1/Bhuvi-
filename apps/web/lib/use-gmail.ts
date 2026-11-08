@@ -19,10 +19,14 @@ export interface GmailFilters {
   priority?: string;
   unreadOnly?: boolean;
   importantOnly?: boolean;
+  connectionId?: string;
 }
 
 export function useGmail() {
+  const [connections, setConnections] = useState<GmailConnectionDto[]>([]);
   const [connection, setConnection] = useState<GmailConnectionDto | null>(null);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+
   const [stats, setStats] = useState<GmailSyncStatsDto | null>(null);
   const [messages, setMessages] = useState<GmailMessageDto[]>([]);
   const [activeMessage, setActiveMessage] = useState<GmailMessageDto | null>(null);
@@ -38,11 +42,20 @@ export function useGmail() {
 
   const [filters, setFilters] = useState<GmailFilters>({});
 
-  const loadConnection = useCallback(async () => {
+  const loadConnections = useCallback(async () => {
     try {
-      const res = await apiFetch<GmailConnectionDto | null>('gmail/connection');
-      if (res.success) {
-        setConnection(res.data);
+      const res = await apiFetch<GmailConnectionDto[]>('gmail/connections');
+      if (res.success && Array.isArray(res.data)) {
+        setConnections(res.data);
+        setConnection(res.data[0] || null);
+      } else {
+        // Fallback to single connection endpoint
+        const singleRes = await apiFetch<GmailConnectionDto | null>('gmail/connection');
+        if (singleRes.success) {
+          const list = singleRes.data ? [singleRes.data] : [];
+          setConnections(list);
+          setConnection(singleRes.data);
+        }
       }
     } catch (err: unknown) {
       if (err instanceof ApiClientError && err.status === 401) {
@@ -52,42 +65,58 @@ export function useGmail() {
     }
   }, []);
 
-  const loadStats = useCallback(async () => {
-    try {
-      const res = await apiFetch<GmailSyncStatsDto>('gmail/sync/stats');
-      if (res.success) {
-        setStats(res.data);
-      }
-    } catch {
-      // Non-fatal if connection is not present
-    }
-  }, []);
+  const loadConnection = useCallback(async () => {
+    return loadConnections();
+  }, [loadConnections]);
 
-  const loadMessages = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const queryParams = new URLSearchParams();
-      if (filters.search) queryParams.set('search', filters.search);
-      if (filters.category) queryParams.set('category', filters.category);
-      if (filters.priority) queryParams.set('priority', filters.priority);
-      if (filters.unreadOnly) queryParams.set('unreadOnly', 'true');
-      if (filters.importantOnly) queryParams.set('importantOnly', 'true');
-
-      const url = `gmail/messages?${queryParams.toString()}`;
-      const res = await apiFetch<PaginatedGmailMessagesResponse>(url);
-      if (res.success) {
-        setMessages(res.data.messages);
-        if (res.data.messages.length > 0 && !activeMessage) {
-          setActiveMessage(res.data.messages[0] || null);
+  const loadStats = useCallback(
+    async (connId?: string | null) => {
+      try {
+        const targetId = connId !== undefined ? connId : selectedConnectionId;
+        const query = targetId ? `?connectionId=${encodeURIComponent(targetId)}` : '';
+        const res = await apiFetch<GmailSyncStatsDto>(`gmail/sync/stats${query}`);
+        if (res.success) {
+          setStats(res.data);
         }
+      } catch {
+        // Non-fatal if connection is not present
       }
-    } catch (err: unknown) {
-      setError((err as Error).message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [filters, activeMessage]);
+    },
+    [selectedConnectionId],
+  );
+
+  const loadMessages = useCallback(
+    async (connId?: string | null) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const queryParams = new URLSearchParams();
+        const activeConn = connId !== undefined ? connId : selectedConnectionId;
+        if (activeConn) queryParams.set('connectionId', activeConn);
+        if (filters.search) queryParams.set('search', filters.search);
+        if (filters.category) queryParams.set('category', filters.category);
+        if (filters.priority) queryParams.set('priority', filters.priority);
+        if (filters.unreadOnly) queryParams.set('unreadOnly', 'true');
+        if (filters.importantOnly) queryParams.set('importantOnly', 'true');
+
+        const url = `gmail/messages?${queryParams.toString()}`;
+        const res = await apiFetch<PaginatedGmailMessagesResponse>(url);
+        if (res.success) {
+          setMessages(res.data.messages);
+          if (res.data.messages.length > 0) {
+            setActiveMessage(res.data.messages[0] || null);
+          } else {
+            setActiveMessage(null);
+          }
+        }
+      } catch (err: unknown) {
+        setError((err as Error).message);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [filters, selectedConnectionId],
+  );
 
   const selectMessage = useCallback(async (id: string) => {
     try {
@@ -95,7 +124,6 @@ export function useGmail() {
       if (res.success) {
         setActiveMessage(res.data);
       }
-      // Load thread
       const threadRes = await apiFetch<GmailMessageDto[]>(`gmail/messages/${id}/thread`);
       if (threadRes.success) {
         setThreadMessages(threadRes.data);
@@ -116,9 +144,26 @@ export function useGmail() {
     }
   }, []);
 
+  const disconnectConnection = useCallback(
+    async (connectionId: string) => {
+      try {
+        await apiFetch<{ disconnected: boolean }>(`gmail/connections/${connectionId}/disconnect`, {
+          method: 'POST',
+        });
+        await loadConnections();
+        await loadStats();
+        await loadMessages();
+      } catch (err: unknown) {
+        setError((err as Error).message);
+      }
+    },
+    [loadConnections, loadStats, loadMessages],
+  );
+
   const disconnectGmail = useCallback(async () => {
     try {
       await apiFetch<{ disconnected: boolean }>('gmail/disconnect', { method: 'POST' });
+      setConnections([]);
       setConnection(null);
       setMessages([]);
       setActiveMessage(null);
@@ -130,21 +175,26 @@ export function useGmail() {
   }, [loadStats]);
 
   const triggerSync = useCallback(
-    async (max = 50) => {
+    async (max = 50, connectionId?: string | null) => {
       setIsSyncing(true);
       setError(null);
       try {
-        await apiFetch<{ syncedCount: number }>(`gmail/sync?max=${max}`, { method: 'POST' });
-        await loadConnection();
-        await loadStats();
-        await loadMessages();
+        const targetId = connectionId !== undefined ? connectionId : selectedConnectionId;
+        const endpoint = targetId
+          ? `gmail/connections/${encodeURIComponent(targetId)}/sync?max=${max}`
+          : `gmail/sync-all?max=${max}`;
+
+        await apiFetch<{ syncedCount: number }>(endpoint, { method: 'POST' });
+        await loadConnections();
+        await loadStats(targetId);
+        await loadMessages(targetId);
       } catch (err: unknown) {
         setError((err as Error).message);
       } finally {
         setIsSyncing(false);
       }
     },
-    [loadConnection, loadStats, loadMessages],
+    [loadConnections, loadStats, loadMessages, selectedConnectionId],
   );
 
   const summarizeMessage = useCallback(async (id: string): Promise<GmailSummaryResponse | null> => {
@@ -190,7 +240,13 @@ export function useGmail() {
   const createDraft = useCallback(
     async (
       id: string,
-      payload: { to: string; subject: string; body: string; threadId?: string },
+      payload: {
+        to: string;
+        subject: string;
+        body: string;
+        threadId?: string;
+        connectionId?: string;
+      },
     ): Promise<GmailDraftCreatedResult | null> => {
       setIsSavingDraft(true);
       try {
@@ -213,12 +269,16 @@ export function useGmail() {
   );
 
   const askAboutEmails = useCallback(
-    async (question: string): Promise<{ answer: string; references: any[] } | null> => {
+    async (
+      question: string,
+      connectionId?: string | null,
+    ): Promise<{ answer: string; references: any[] } | null> => {
       setIsAsking(true);
       try {
+        const targetId = connectionId !== undefined ? connectionId : selectedConnectionId;
         const res = await apiFetch<{ answer: string; references: any[] }>('gmail/ask', {
           method: 'POST',
-          body: JSON.stringify({ question }),
+          body: JSON.stringify({ question, connectionId: targetId || undefined }),
         });
         if (res.success) {
           return res.data;
@@ -231,17 +291,23 @@ export function useGmail() {
         setIsAsking(false);
       }
     },
-    [],
+    [selectedConnectionId],
   );
 
   useEffect(() => {
-    loadConnection();
-    loadStats();
-    loadMessages();
-  }, [loadConnection, loadStats, loadMessages]);
+    loadConnections();
+  }, [loadConnections]);
+
+  useEffect(() => {
+    loadStats(selectedConnectionId);
+    loadMessages(selectedConnectionId);
+  }, [loadStats, loadMessages, selectedConnectionId]);
 
   return {
+    connections,
     connection,
+    selectedConnectionId,
+    setSelectedConnectionId,
     stats,
     messages,
     activeMessage,
@@ -255,8 +321,10 @@ export function useGmail() {
     error,
     filters,
     setFilters,
+    loadConnections,
     loadConnection,
     connectGmail,
+    disconnectConnection,
     disconnectGmail,
     triggerSync,
     loadMessages,
