@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService, Prisma } from '@bhuvi/database';
 import {
   MemoryDto,
@@ -21,6 +21,7 @@ import { ChunkingService } from './chunking.service';
 import { EmbeddingService } from './embedding.service';
 import { VectorSearchService } from './vector-search.service';
 import { RagService } from './rag.service';
+import { SecretDetectorService } from './secret-detector.service';
 
 export interface PaginatedMemoryResponse {
   memories: MemoryDto[];
@@ -89,6 +90,7 @@ export class MemoryService {
     private readonly embeddingService: EmbeddingService,
     private readonly vectorSearch: VectorSearchService,
     private readonly ragService: RagService,
+    private readonly secretDetector: SecretDetectorService,
   ) {}
 
   /**
@@ -210,6 +212,13 @@ export class MemoryService {
   ): Promise<MemoryDto & { conflict?: MemoryConflictResult }> {
     const title = dto.title.trim();
     const content = dto.content.trim();
+
+    // Check for obvious credentials or secrets
+    const secretCheck = this.secretDetector.detectSecret(`${title}\n${content}`);
+    if (secretCheck.hasSecret) {
+      throw new BadRequestException(secretCheck.reason);
+    }
+
     const category = dto.category;
     const importance = dto.importance || 'MEDIUM';
     const source = dto.source?.trim() || 'USER_MANUAL';
@@ -412,6 +421,14 @@ export class MemoryService {
       throw new NotFoundException(`Memory with ID "${id}" was not found.`);
     }
 
+    if (dto.title !== undefined || dto.content !== undefined) {
+      const textToVerify = `${dto.title ?? existing.title}\n${dto.content ?? existing.content}`;
+      const secretCheck = this.secretDetector.detectSecret(textToVerify);
+      if (secretCheck.hasSecret) {
+        throw new BadRequestException(secretCheck.reason);
+      }
+    }
+
     const contentChanged = dto.content !== undefined && dto.content.trim() !== existing.content;
 
     // 1. Update basic fields
@@ -481,6 +498,19 @@ export class MemoryService {
       throw new NotFoundException(`Memory with ID "${id}" was not found.`);
     }
 
+    // Permanently clean up any associated chunks, tag assignments, and access logs
+    await this.prisma.memoryChunk.deleteMany({
+      where: { memoryId: id },
+    });
+
+    await this.prisma.memoryTagAssignment.deleteMany({
+      where: { memoryId: id },
+    });
+
+    await this.prisma.memoryAccessLog.deleteMany({
+      where: { memoryId: id },
+    });
+
     await this.prisma.memory.delete({
       where: { id },
     });
@@ -517,14 +547,15 @@ export class MemoryService {
       category: dto.category,
     });
 
-    // Record access log
+    // Record access log with sanitized query (redact secrets and truncate)
+    const sanitizedQuery = this.secretDetector.redactSecrets(dto.query).slice(0, 255);
     try {
       await this.prisma.memoryAccessLog.create({
         data: {
           userId,
           memoryId: results[0]?.memoryId,
           action: 'SEARCH',
-          query: dto.query,
+          query: sanitizedQuery,
           similarity: results[0]?.similarity,
         },
       });

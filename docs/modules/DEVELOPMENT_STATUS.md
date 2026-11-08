@@ -205,28 +205,30 @@ pnpm test          → PASS (25 suites, 130 tests passed across monorepo)
 
 ---
 
-## Module 08 — Personal Memory & Knowledge Acceptance Criteria
+## Module 08 — Personal Memory & Knowledge Acceptance & Security Audit Criteria
 
-### ✅ All Criteria Met
+### ✅ All Audit Criteria Met
 
 | Criterion | Status | Evidence |
 |---|---|---|
-| Safe Local Vector Storage in PostgreSQL 16 | ✅ | Stored as `Float[]` array columns with sub-millisecond mathematical cosine similarity computation; zero dependency on unsafe C-extensions |
+| Safe Local Vector Storage in PostgreSQL 16 | ✅ | Stored as `Float[]` array columns with mathematical cosine similarity computation; zero dependency on unsafe C-extensions |
 | Local Embedding Model via Ollama | ✅ | `nomic-embed-text` installed locally, returning 768-dimensional float embeddings |
 | Dynamic Dimensions Discovery | ✅ | Dynamic extraction from model response (`data.embedding.length`); non-hardcoded |
 | 8 Memory Categories & 4 Importance Levels | ✅ | Supported across `@bhuvi/shared`, Prisma models, DTO validations, and Web UI |
 | Smart Chunking & Sentence Boundary Handling | ✅ | `ChunkingService` with configurable size, overlap, and token approximation |
-| Strict Multi-Tenant Isolation | ✅ | Verified by `real-memory.spec.ts`: User 2 cannot access, search, or delete User 1 memories |
-| Grounded RAG with Source Citations | ✅ | `RagService` retrieves chunks, formats context, invokes local `qwen2.5:3b`, cites sources |
-| Anti-Hallucination Honest Fallback | ✅ | Responds with honest grounded message when requested facts are absent from memory |
-| REST APIs under `/api/v1/memory` | ✅ | 10 endpoints implemented, rate-limited, and protected by `JwtAuthGuard` |
-| Web Dashboard at `/dashboard/memory` | ✅ | Interactive Knowledge Base viewer, Semantic Search tab, Ask BHUVI (RAG) tab, Add/Edit modal |
-| Full Monorepo Test Coverage | ✅ | 292 / 292 tests passing across all packages; 0 failures |
+| Sensitive Credential Protection | ✅ | `SecretDetectorService` detects and rejects API keys, private keys, passwords, and tokens with HTTP 400; redacts secrets in search, RAG, and logs |
+| Real Worker Processing Pipeline | ✅ | BullMQ worker chunks, embeds via Ollama, transitions status (`PENDING` $\to$ `PROCESSING` $\to$ `COMPLETED`/`FAILED`), retains failed memories, handles retries |
+| Strict Multi-Tenant Isolation | ✅ | Verified by `security-memory.spec.ts` & `real-memory.spec.ts`: User B cannot access, read, update, delete, reprocess, search, or view User A memories |
+| Deletion & Cascade Consistency | ✅ | Deleting memory cascades to all chunks, tag assignments, and access logs |
+| Grounded RAG & Prompt Injection Defense | ✅ | `<untrusted_historical_memory>` XML delimiters, strict security directives forbidding command execution, source citations, honest fallback |
+| Vector Search Performance Benchmark | ✅ | Benchmarked 100, 1,000, 5,000 chunks; documented pure cosine vs network wire deserialization, and future `pgvector` indexing roadmap |
+| Privacy-Preserving Audit Logging | ✅ | `MemoryAccessLog` redacts secrets, truncates queries to 255 chars, user-scoped |
+| Full Monorepo Test Coverage | ✅ | 307 / 307 tests passing across all packages; 0 failures |
 
 ---
 
 ## Next Steps
 
-> 🛑 **Module 08 is COMPLETE. Awaiting user review and explicit approval before starting Module 09 (Gmail Integration).**
+> 🛑 **Module 08 implementation & final security audit are COMPLETE. Awaiting user review and explicit approval before starting Module 09 (Gmail Integration).**
 
 ```

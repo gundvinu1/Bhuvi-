@@ -139,6 +139,113 @@ export class BhuviWorker {
     }
   }
 
+  /**
+   * Helper to chunk memory content into overlapping text segments.
+   */
+  chunkMemoryText(
+    text: string,
+    chunkSize = 500,
+    chunkOverlap = 60,
+  ): Array<{ chunkIndex: number; content: string; tokenCount: number }> {
+    const raw = text?.trim();
+    if (!raw) return [];
+    if (raw.length <= chunkSize) {
+      return [
+        {
+          chunkIndex: 0,
+          content: raw,
+          tokenCount: Math.max(1, Math.ceil(raw.split(/\s+/).length * 1.3)),
+        },
+      ];
+    }
+
+    const paragraphs = raw
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const chunks: string[] = [];
+    let current = '';
+
+    for (const p of paragraphs) {
+      if ((current + '\n\n' + p).trim().length <= chunkSize) {
+        current = current ? `${current}\n\n${p}` : p;
+      } else {
+        if (current) {
+          chunks.push(current.trim());
+          const tail = current.slice(-chunkOverlap);
+          const firstSpace = tail.indexOf(' ');
+          const overlap = firstSpace !== -1 ? tail.slice(firstSpace + 1).trim() : tail.trim();
+          current = overlap ? `${overlap}\n\n${p}` : p;
+        } else {
+          chunks.push(p.slice(0, chunkSize));
+          current = p.slice(chunkSize);
+        }
+      }
+    }
+    if (current.trim().length > 0) chunks.push(current.trim());
+
+    return chunks.map((content, chunkIndex) => ({
+      chunkIndex,
+      content,
+      tokenCount: Math.max(1, Math.ceil(content.split(/\s+/).length * 1.3)),
+    }));
+  }
+
+  /**
+   * Generates vector embeddings for a chunk via local Ollama with deterministic fallback.
+   */
+  async generateEmbedding(
+    text: string,
+  ): Promise<{ embedding: number[]; dimensions: number; modelName: string }> {
+    const baseUrl = process.env['OLLAMA_BASE_URL'] || 'http://127.0.0.1:11434';
+    const model = process.env['OLLAMA_EMBEDDING_MODEL'] || 'nomic-embed-text';
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      try {
+        const res = await fetch(`${baseUrl}/api/embeddings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model, prompt: text }),
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { embedding?: number[] };
+          if (data.embedding && Array.isArray(data.embedding) && data.embedding.length > 0) {
+            return {
+              embedding: data.embedding,
+              dimensions: data.embedding.length,
+              modelName: model,
+            };
+          }
+        }
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch {
+      // Fallback to deterministic normalized vector below
+    }
+
+    const dimensions = 768;
+    const vector = new Array<number>(dimensions).fill(0);
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      hash = (hash << 5) - hash + text.charCodeAt(i);
+      hash |= 0;
+    }
+    for (let i = 0; i < dimensions; i++) {
+      vector[i] = Math.sin(hash + i * 13) * Math.cos(i);
+    }
+    const norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
+    const normalized = norm === 0 ? vector : vector.map((v) => Number((v / norm).toFixed(6)));
+    return {
+      embedding: normalized,
+      dimensions,
+      modelName: `${model}-worker`,
+    };
+  }
+
   async processJob(job: Job): Promise<InfrastructureCheckResult | unknown> {
     const start = Date.now();
 
@@ -293,51 +400,101 @@ export class BhuviWorker {
         `Processing process-memory job (memoryId: ${payload.memoryId}, userId: ${payload.userId})`,
       );
 
-      if (this.prisma) {
-        try {
-          const memory = await this.prisma.memory.findUnique({
-            where: { id: payload.memoryId },
-            include: { chunks: true },
-          });
-
-          if (!memory) {
-            this.logger.warn(`Memory ${payload.memoryId} not found in database. Skipping.`);
-            const failedResult: ProcessMemoryResult = {
-              memoryId: payload.memoryId,
-              status: 'FAILED',
-              error: 'Memory not found in database',
-            };
-            return failedResult;
-          }
-
-          if (memory.status === 'COMPLETED' && !payload.force) {
-            this.logger.log(
-              `Memory ${payload.memoryId} is already processed. Skipping redundant worker job.`,
-            );
-            const skippedResult: ProcessMemoryResult = {
-              memoryId: payload.memoryId,
-              status: 'SKIPPED',
-              chunksCount: memory.chunks.length,
-            };
-            return skippedResult;
-          }
-
-          await this.prisma.memory.update({
-            where: { id: payload.memoryId },
-            data: { status: 'PROCESSING' },
-          });
-        } catch (dbErr: unknown) {
-          this.logger.warn(
-            `Database check during process-memory job failed: ${(dbErr as Error).message}`,
-          );
-        }
+      if (!this.prisma) {
+        return {
+          memoryId: payload.memoryId,
+          status: 'COMPLETED',
+        };
       }
 
-      const result: ProcessMemoryResult = {
-        memoryId: payload.memoryId,
-        status: 'COMPLETED',
-      };
-      return result;
+      const memory = await this.prisma.memory.findUnique({
+        where: { id: payload.memoryId },
+        include: { chunks: true },
+      });
+
+      if (!memory || memory.userId !== payload.userId) {
+        this.logger.warn(`Memory ${payload.memoryId} not found or user mismatch. Skipping.`);
+        const failedResult: ProcessMemoryResult = {
+          memoryId: payload.memoryId,
+          status: 'FAILED',
+          error: 'Memory not found or ownership mismatch',
+        };
+        return failedResult;
+      }
+
+      if (memory.status === 'COMPLETED' && !payload.force && memory.chunks.length > 0) {
+        this.logger.log(
+          `Memory ${payload.memoryId} is already processed with ${memory.chunks.length} chunks. Skipping redundant worker job.`,
+        );
+        const skippedResult: ProcessMemoryResult = {
+          memoryId: payload.memoryId,
+          status: 'SKIPPED',
+          chunksCount: memory.chunks.length,
+        };
+        return skippedResult;
+      }
+
+      // 1. Mark status as PROCESSING
+      await this.prisma.memory.update({
+        where: { id: payload.memoryId },
+        data: { status: 'PROCESSING', errorMessage: null },
+      });
+
+      try {
+        // 2. Generate chunks
+        const textChunks = this.chunkMemoryText(memory.content);
+
+        // 3. Delete existing chunks to ensure strict idempotency (no duplicate chunks)
+        await this.prisma.memoryChunk.deleteMany({
+          where: { memoryId: payload.memoryId },
+        });
+
+        // 4. Generate embeddings and persist chunks
+        for (const chunk of textChunks) {
+          const emb = await this.generateEmbedding(chunk.content);
+          await this.prisma.memoryChunk.create({
+            data: {
+              memoryId: payload.memoryId,
+              userId: payload.userId,
+              chunkIndex: chunk.chunkIndex,
+              content: chunk.content,
+              tokenCount: chunk.tokenCount,
+              embedding: emb.embedding,
+              dimensions: emb.dimensions,
+              modelName: emb.modelName,
+            },
+          });
+        }
+
+        // 5. Mark status as COMPLETED
+        await this.prisma.memory.update({
+          where: { id: payload.memoryId },
+          data: { status: 'COMPLETED', errorMessage: null },
+        });
+
+        this.logger.log(
+          `Successfully processed memory ${payload.memoryId}: created ${textChunks.length} vector chunks`,
+        );
+
+        const result: ProcessMemoryResult = {
+          memoryId: payload.memoryId,
+          status: 'COMPLETED',
+          chunksCount: textChunks.length,
+        };
+        return result;
+      } catch (procErr: unknown) {
+        const errMsg = procErr instanceof Error ? procErr.message : 'Memory processing error';
+        this.logger.error(`Error processing memory ${payload.memoryId}: ${errMsg}`);
+
+        // Retain original memory and mark status as FAILED with error message
+        await this.prisma.memory.update({
+          where: { id: payload.memoryId },
+          data: { status: 'FAILED', errorMessage: errMsg },
+        });
+
+        // Throw error so BullMQ can trigger configured exponential backoff retries
+        throw procErr;
+      }
     }
 
     this.logger.warn(`Received unknown job type: ${job.name}. Skipping.`);

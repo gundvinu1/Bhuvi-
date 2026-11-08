@@ -250,10 +250,16 @@ describe('BhuviWorker Foundation & Queue Integration', () => {
       memory: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'mem-101',
+          userId: 'user-1',
+          content: 'BHUVI personal memory long-term knowledge text for testing worker pipeline.',
           status: 'PENDING',
           chunks: [],
         }),
-        update: jest.fn().mockResolvedValue({ id: 'mem-101', status: 'PROCESSING' }),
+        update: jest.fn().mockResolvedValue({ id: 'mem-101', status: 'COMPLETED' }),
+      },
+      memoryChunk: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        create: jest.fn().mockResolvedValue({ id: 'chk-created' }),
       },
     };
 
@@ -270,9 +276,18 @@ describe('BhuviWorker Foundation & Queue Integration', () => {
     const result = (await worker.processJob(mockJob)) as ProcessMemoryResult;
     expect(result.status).toBe('COMPLETED');
     expect(result.memoryId).toBe('mem-101');
-    expect(mockPrisma.memory.update).toHaveBeenCalledWith({
+    expect(result.chunksCount).toBe(1);
+    expect(mockPrisma.memory.update).toHaveBeenNthCalledWith(1, {
       where: { id: 'mem-101' },
-      data: { status: 'PROCESSING' },
+      data: { status: 'PROCESSING', errorMessage: null },
+    });
+    expect(mockPrisma.memoryChunk.deleteMany).toHaveBeenCalledWith({
+      where: { memoryId: 'mem-101' },
+    });
+    expect(mockPrisma.memoryChunk.create).toHaveBeenCalled();
+    expect(mockPrisma.memory.update).toHaveBeenNthCalledWith(2, {
+      where: { id: 'mem-101' },
+      data: { status: 'COMPLETED', errorMessage: null },
     });
   });
 
@@ -281,10 +296,15 @@ describe('BhuviWorker Foundation & Queue Integration', () => {
       memory: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'mem-102',
+          userId: 'user-1',
           status: 'COMPLETED',
           chunks: [{ id: 'chk-1' }, { id: 'chk-2' }],
         }),
         update: jest.fn(),
+      },
+      memoryChunk: {
+        deleteMany: jest.fn(),
+        create: jest.fn(),
       },
     };
 
@@ -302,6 +322,41 @@ describe('BhuviWorker Foundation & Queue Integration', () => {
     expect(result.status).toBe('SKIPPED');
     expect(result.chunksCount).toBe(2);
     expect(mockPrisma.memory.update).not.toHaveBeenCalled();
+  });
+
+  it('should mark memory as FAILED and rethrow error when chunking or embedding fails', async () => {
+    const mockPrisma = {
+      memory: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'mem-error',
+          userId: 'user-1',
+          content: 'Failing memory content',
+          status: 'PENDING',
+          chunks: [],
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'mem-error', status: 'FAILED' }),
+      },
+      memoryChunk: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        create: jest.fn().mockRejectedValue(new Error('Database write failure')),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+    const mockJob = {
+      id: 'job-mem-fail',
+      name: JOB_PROCESS_MEMORY,
+      data: { memoryId: 'mem-error', userId: 'user-1' } as ProcessMemoryPayload,
+    } as unknown as Job;
+
+    await expect(worker.processJob(mockJob)).rejects.toThrow('Database write failure');
+    expect(mockPrisma.memory.update).toHaveBeenCalledWith({
+      where: { id: 'mem-error' },
+      data: { status: 'FAILED', errorMessage: 'Database write failure' },
+    });
   });
 
   it('should return FAILED status when memory is not found in database', async () => {

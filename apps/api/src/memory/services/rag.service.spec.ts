@@ -2,12 +2,14 @@ import { PrismaService } from '@bhuvi/database';
 import { RagService } from './rag.service';
 import { VectorSearchService } from './vector-search.service';
 import { OllamaProvider } from '../../ai/ollama.provider';
+import { SecretDetectorService } from './secret-detector.service';
 
 describe('RagService', () => {
   let service: RagService;
   let prisma: Partial<PrismaService>;
   let vectorSearch: Partial<VectorSearchService>;
   let ollamaProvider: Partial<OllamaProvider>;
+  let secretDetector: SecretDetectorService;
 
   beforeEach(() => {
     prisma = {
@@ -24,10 +26,13 @@ describe('RagService', () => {
       chat: jest.fn(),
     };
 
+    secretDetector = new SecretDetectorService();
+
     service = new RagService(
       prisma as PrismaService,
       vectorSearch as VectorSearchService,
       ollamaProvider as OllamaProvider,
+      secretDetector,
     );
   });
 

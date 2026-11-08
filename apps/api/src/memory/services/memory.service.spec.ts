@@ -1,10 +1,11 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@bhuvi/database';
 import { MemoryService } from './memory.service';
 import { ChunkingService } from './chunking.service';
 import { EmbeddingService } from './embedding.service';
 import { VectorSearchService } from './vector-search.service';
 import { RagService } from './rag.service';
+import { SecretDetectorService } from './secret-detector.service';
 
 describe('MemoryService', () => {
   let service: MemoryService;
@@ -13,6 +14,7 @@ describe('MemoryService', () => {
   let embeddingService: Partial<EmbeddingService>;
   let vectorSearch: Partial<VectorSearchService>;
   let ragService: Partial<RagService>;
+  let secretDetector: SecretDetectorService;
 
   beforeEach(() => {
     prisma = {
@@ -39,6 +41,7 @@ describe('MemoryService', () => {
       } as any,
       memoryAccessLog: {
         create: jest.fn(),
+        deleteMany: jest.fn(),
       } as any,
     };
 
@@ -70,16 +73,28 @@ describe('MemoryService', () => {
       ask: jest.fn(),
     };
 
+    secretDetector = new SecretDetectorService();
+
     service = new MemoryService(
       prisma as PrismaService,
       chunkingService as ChunkingService,
       embeddingService as EmbeddingService,
       vectorSearch as VectorSearchService,
       ragService as RagService,
+      secretDetector,
     );
   });
 
   describe('createMemory', () => {
+    it('should reject memory creation if plaintext secrets or API keys are detected', async () => {
+      await expect(
+        service.createMemory('user-1', {
+          title: 'My AWS Keys',
+          content: 'Here is my AWS key: AKIAIOSFODNN7EXAMPLE',
+          category: 'NOTES',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
     it('should create memory, associate tags, and process vector chunks', async () => {
       const mockCreated = {
         id: 'mem-1',
