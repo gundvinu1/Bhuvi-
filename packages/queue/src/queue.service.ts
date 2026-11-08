@@ -5,12 +5,14 @@ import {
   JOB_EXECUTE_PLAN,
   JOB_ANALYZE_MESSAGE,
   JOB_PROCESS_MEMORY,
+  JOB_SYNC_GMAIL,
 } from './queue.constants';
 import {
   InfrastructureCheckPayload,
   ExecutePlanPayload,
   AnalyzeMessagePayload,
   ProcessMemoryPayload,
+  SyncGmailPayload,
 } from './queue.types';
 import { getRedisConnectionOptions } from './queue.config';
 
@@ -86,5 +88,21 @@ export async function enqueueProcessMemory(queue: Queue, payload: ProcessMemoryP
     },
     removeOnComplete: 100,
     removeOnFail: 500,
+  });
+}
+
+/**
+ * Enqueues a Gmail inbox synchronization job.
+ */
+export async function enqueueSyncGmail(queue: Queue, payload: SyncGmailPayload) {
+  return queue.add(JOB_SYNC_GMAIL, payload, {
+    jobId: `gmail-sync-${payload.connectionId}-${Date.now()}`,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 3000,
+    },
+    removeOnComplete: 50,
+    removeOnFail: 200,
   });
 }

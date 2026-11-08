@@ -32,6 +32,12 @@ model User {
   memoryTags   MemoryTag[]
   accessLogs   MemoryAccessLog[]
 
+  // Module 09: Gmail Integration
+  gmailConnections GmailConnection[]
+  gmailMessages    GmailMessage[]
+  gmailAttachments GmailAttachment[]
+  gmailSyncStates  GmailSyncState[]
+
   @@index([email])
   @@map("users")
 }
@@ -153,6 +159,7 @@ model Message {
   analysis         MessageAnalysis?
   actionItems      MessageActionItem[]
   labelAssignments MessageLabelAssignment[]
+  gmailMessage     GmailMessage?
 
   @@index([userId])
   @@index([processingStatus])
@@ -347,4 +354,116 @@ model MemoryAccessLog {
   @@index([action])
   @@index([timestamp])
   @@map("memory_access_logs")
+}
+
+// ============================================================
+// Module 09: Gmail Integration
+// ============================================================
+
+/// Authorized Gmail OAuth connection for a user
+model GmailConnection {
+  id                    String    @id @default(uuid())
+  userId                String    @map("user_id")
+  googleAccountEmail    String    @map("google_account_email")
+  googleAccountId       String?   @map("google_account_id")
+  encryptedAccessToken  String    @map("encrypted_access_token")
+  encryptedRefreshToken String?   @map("encrypted_refresh_token")
+  tokenExpiresAt        DateTime? @map("token_expires_at")
+  scopes                String[]  @default([])
+  connectionStatus      String    @default("CONNECTED") @map("connection_status")
+  lastSyncedAt          DateTime? @map("last_synced_at")
+  lastHistoryId         String?   @map("last_history_id")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages              GmailMessage[]
+  syncStates            GmailSyncState[]
+
+  @@unique([userId, googleAccountEmail])
+  @@index([userId])
+  @@index([connectionStatus])
+  @@map("gmail_connections")
+}
+
+/// Synchronized Gmail email message
+model GmailMessage {
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  gmailConnectionId String    @map("gmail_connection_id")
+  providerMessageId String    @map("provider_message_id")
+  providerThreadId  String    @map("provider_thread_id")
+  senderName        String?   @map("sender_name")
+  senderEmail       String    @map("sender_email")
+  recipientEmails   String[]  @default([]) @map("recipient_emails")
+  ccEmails          String[]  @default([]) @map("cc_emails")
+  subject           String    @default("")
+  snippet           String?
+  bodyText          String    @map("body_text")
+  bodyHtml          String?   @map("body_html")
+  receivedAt        DateTime  @map("received_at")
+  isRead            Boolean   @default(false) @map("is_read")
+  hasAttachments    Boolean   @default(false) @map("has_attachments")
+  labels            String[]  @default([])
+  syncStatus        String    @default("SYNCHRONIZED") @map("sync_status")
+  messageId         String?   @unique @map("message_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection        GmailConnection   @relation(fields: [gmailConnectionId], references: [id], onDelete: Cascade)
+  message           Message?          @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  attachments       GmailAttachment[]
+
+  @@unique([gmailConnectionId, providerMessageId])
+  @@index([userId])
+  @@index([providerMessageId])
+  @@index([providerThreadId])
+  @@index([senderEmail])
+  @@index([receivedAt])
+  @@index([isRead])
+  @@map("gmail_messages")
+}
+
+/// Metadata for attachments on a synchronized Gmail message
+model GmailAttachment {
+  id                   String       @id @default(uuid())
+  userId               String       @map("user_id")
+  gmailMessageId       String       @map("gmail_message_id")
+  providerAttachmentId String       @map("provider_attachment_id")
+  filename             String
+  mimeType             String       @map("mime_type")
+  size                 Int          @default(0)
+  downloadStatus       String       @default("METADATA_ONLY") @map("download_status")
+  createdAt            DateTime     @default(now()) @map("created_at")
+
+  user                 User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message              GmailMessage @relation(fields: [gmailMessageId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([gmailMessageId])
+  @@map("gmail_attachments")
+}
+
+/// Synchronization run state and telemetry for Gmail
+model GmailSyncState {
+  id                   String          @id @default(uuid())
+  userId               String          @map("user_id")
+  gmailConnectionId    String          @map("gmail_connection_id")
+  lastHistoryId        String?         @map("last_history_id")
+  lastSuccessfulSyncAt DateTime?       @map("last_successful_sync_at")
+  lastAttemptAt        DateTime        @default(now()) @map("last_attempt_at")
+  syncStatus           String          @default("IDLE") @map("sync_status")
+  errorMessage         String?         @map("error_message")
+  syncedCount          Int             @default(0) @map("synced_count")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection           GmailConnection @relation(fields: [gmailConnectionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([gmailConnectionId])
+  @@index([syncStatus])
+  @@map("gmail_sync_states")
 }

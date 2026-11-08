@@ -9,6 +9,7 @@ import { AiModule } from './ai/ai.module';
 import { OrchestratorModule } from './orchestrator/orchestrator.module';
 import { MessagesModule } from './messages/messages.module';
 import { MemoryModule } from './memory/memory.module';
+import { GmailModule } from './gmail/gmail.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import appConfig from './config/app.config';
 import authConfig from './config/auth.config';
@@ -34,6 +35,7 @@ import { aiConfig } from './config/ai.config';
     OrchestratorModule,
     MessagesModule,
     MemoryModule,
+    GmailModule,
   ],
   providers: [
     {

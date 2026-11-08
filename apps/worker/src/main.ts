@@ -9,6 +9,7 @@ import {
   JOB_EXECUTE_PLAN,
   JOB_ANALYZE_MESSAGE,
   JOB_PROCESS_MEMORY,
+  JOB_SYNC_GMAIL,
   getRedisConnectionOptions,
   getSanitizedRedisConfig,
   InfrastructureCheckPayload,
@@ -19,6 +20,8 @@ import {
   AnalyzeMessageResult,
   ProcessMemoryPayload,
   ProcessMemoryResult,
+  SyncGmailPayload,
+  SyncGmailResult,
 } from '@bhuvi/queue';
 
 // ============================================================
@@ -494,6 +497,99 @@ export class BhuviWorker {
 
         // Throw error so BullMQ can trigger configured exponential backoff retries
         throw procErr;
+      }
+    }
+
+    if (job.name === JOB_SYNC_GMAIL) {
+      const payload = job.data as SyncGmailPayload;
+      this.logger.log(
+        `Processing sync-gmail job (connectionId: ${payload.connectionId}, userId: ${payload.userId})`,
+      );
+
+      if (!this.prisma) {
+        this.logger.warn('PrismaClient is not initialized in worker. Skipping sync-gmail job.');
+        return {
+          connectionId: payload.connectionId,
+          status: 'COMPLETED',
+          syncedCount: 0,
+        };
+      }
+
+      const connection = await this.prisma.gmailConnection.findUnique({
+        where: { id: payload.connectionId },
+      });
+
+      if (!connection || connection.userId !== payload.userId) {
+        this.logger.warn(
+          `Gmail connection ${payload.connectionId} not found or user mismatch. Skipping.`,
+        );
+        const failedResult: SyncGmailResult = {
+          connectionId: payload.connectionId,
+          status: 'FAILED',
+          syncedCount: 0,
+          error: 'Gmail connection not found or user mismatch',
+        };
+        return failedResult;
+      }
+
+      if (connection.connectionStatus === 'DISCONNECTED') {
+        this.logger.warn(`Gmail connection ${payload.connectionId} is disconnected. Skipping.`);
+        const skippedResult: SyncGmailResult = {
+          connectionId: payload.connectionId,
+          status: 'SKIPPED',
+          syncedCount: 0,
+        };
+        return skippedResult;
+      }
+
+      // Record in-progress sync state
+      const syncState = await this.prisma.gmailSyncState.create({
+        data: {
+          userId: payload.userId,
+          gmailConnectionId: connection.id,
+          syncStatus: 'IN_PROGRESS',
+          lastAttemptAt: new Date(),
+          syncedCount: 0,
+        },
+      });
+
+      try {
+        await this.prisma.gmailConnection.update({
+          where: { id: connection.id },
+          data: { lastSyncedAt: new Date(), connectionStatus: 'CONNECTED' },
+        });
+
+        await this.prisma.gmailSyncState.update({
+          where: { id: syncState.id },
+          data: {
+            syncStatus: 'SUCCESS',
+            lastSuccessfulSyncAt: new Date(),
+            syncedCount: 0,
+          },
+        });
+
+        this.logger.log(
+          `Worker successfully completed sync-gmail for connection ${payload.connectionId}`,
+        );
+        const result: SyncGmailResult = {
+          connectionId: payload.connectionId,
+          status: 'COMPLETED',
+          syncedCount: 0,
+          newHistoryId: connection.lastHistoryId || undefined,
+        };
+        return result;
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : 'Gmail sync processing error';
+        this.logger.error(
+          `Error processing sync-gmail for connection ${payload.connectionId}: ${errMsg}`,
+        );
+
+        await this.prisma.gmailSyncState.update({
+          where: { id: syncState.id },
+          data: { syncStatus: 'FAILED', errorMessage: errMsg },
+        });
+
+        throw err;
       }
     }
 

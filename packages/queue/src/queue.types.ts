@@ -67,3 +67,18 @@ export interface ProcessMemoryResult {
   dimensions?: number;
   error?: string;
 }
+
+export interface SyncGmailPayload {
+  connectionId: string;
+  userId: string;
+  mode?: 'INITIAL' | 'INCREMENTAL';
+  maxMessages?: number;
+}
+
+export interface SyncGmailResult {
+  connectionId: string;
+  status: 'COMPLETED' | 'FAILED' | 'SKIPPED';
+  syncedCount: number;
+  newHistoryId?: string;
+  error?: string;
+}

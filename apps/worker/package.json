@@ -15,7 +15,8 @@
   "dependencies": {
     "@bhuvi/database": "workspace:*",
     "@bhuvi/queue": "workspace:*",
-    "@bhuvi/shared": "workspace:*"
+    "@bhuvi/shared": "workspace:*",
+    "googleapis": "^189.0.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

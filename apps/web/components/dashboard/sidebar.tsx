@@ -56,12 +56,10 @@ export const NAV_ITEMS = [
     functional: true,
   },
   {
-    name: 'Emails',
-    href: '#',
+    name: 'Gmail & Emails',
+    href: '/dashboard/gmail',
     icon: EmailsIcon,
-    functional: false,
-    badge: 'Soon',
-    note: 'Module 09',
+    functional: true,
   },
   {
     name: 'Tasks',
