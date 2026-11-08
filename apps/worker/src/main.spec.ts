@@ -5,12 +5,15 @@ import {
   JOB_INFRASTRUCTURE_CHECK,
   JOB_EXECUTE_PLAN,
   JOB_ANALYZE_MESSAGE,
+  JOB_PROCESS_MEMORY,
   InfrastructureCheckPayload,
   InfrastructureCheckResult,
   ExecutePlanPayload,
   ExecutePlanResult,
   AnalyzeMessagePayload,
   AnalyzeMessageResult,
+  ProcessMemoryPayload,
+  ProcessMemoryResult,
   Job,
 } from '@bhuvi/queue';
 
@@ -238,6 +241,88 @@ describe('BhuviWorker Foundation & Queue Integration', () => {
     } as unknown as Job;
 
     const result = (await worker.processJob(mockJob)) as AnalyzeMessageResult;
+    expect(result.status).toBe('FAILED');
+    expect(result.error).toContain('not found');
+  });
+
+  it('should process process-memory job successfully and update DB status', async () => {
+    const mockPrisma = {
+      memory: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'mem-101',
+          status: 'PENDING',
+          chunks: [],
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'mem-101', status: 'PROCESSING' }),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+    const mockJob = {
+      id: 'job-mem-1',
+      name: JOB_PROCESS_MEMORY,
+      data: { memoryId: 'mem-101', userId: 'user-1' } as ProcessMemoryPayload,
+    } as unknown as Job;
+
+    const result = (await worker.processJob(mockJob)) as ProcessMemoryResult;
+    expect(result.status).toBe('COMPLETED');
+    expect(result.memoryId).toBe('mem-101');
+    expect(mockPrisma.memory.update).toHaveBeenCalledWith({
+      where: { id: 'mem-101' },
+      data: { status: 'PROCESSING' },
+    });
+  });
+
+  it('should skip already processed memory unless force is true', async () => {
+    const mockPrisma = {
+      memory: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'mem-102',
+          status: 'COMPLETED',
+          chunks: [{ id: 'chk-1' }, { id: 'chk-2' }],
+        }),
+        update: jest.fn(),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+    const mockJob = {
+      id: 'job-mem-2',
+      name: JOB_PROCESS_MEMORY,
+      data: { memoryId: 'mem-102', userId: 'user-1' } as ProcessMemoryPayload,
+    } as unknown as Job;
+
+    const result = (await worker.processJob(mockJob)) as ProcessMemoryResult;
+    expect(result.status).toBe('SKIPPED');
+    expect(result.chunksCount).toBe(2);
+    expect(mockPrisma.memory.update).not.toHaveBeenCalled();
+  });
+
+  it('should return FAILED status when memory is not found in database', async () => {
+    const mockPrisma = {
+      memory: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+    const mockJob = {
+      id: 'job-mem-3',
+      name: JOB_PROCESS_MEMORY,
+      data: { memoryId: 'mem-missing', userId: 'user-1' } as ProcessMemoryPayload,
+    } as unknown as Job;
+
+    const result = (await worker.processJob(mockJob)) as ProcessMemoryResult;
     expect(result.status).toBe('FAILED');
     expect(result.error).toContain('not found');
   });

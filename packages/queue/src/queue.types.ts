@@ -53,3 +53,17 @@ export interface AnalyzeMessageResult {
   priority?: string;
   error?: string;
 }
+
+export interface ProcessMemoryPayload {
+  memoryId: string;
+  userId: string;
+  force?: boolean;
+}
+
+export interface ProcessMemoryResult {
+  memoryId: string;
+  status: 'COMPLETED' | 'FAILED' | 'SKIPPED';
+  chunksCount?: number;
+  dimensions?: number;
+  error?: string;
+}

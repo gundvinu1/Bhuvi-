@@ -4,11 +4,13 @@ import {
   JOB_INFRASTRUCTURE_CHECK,
   JOB_EXECUTE_PLAN,
   JOB_ANALYZE_MESSAGE,
+  JOB_PROCESS_MEMORY,
 } from './queue.constants';
 import {
   InfrastructureCheckPayload,
   ExecutePlanPayload,
   AnalyzeMessagePayload,
+  ProcessMemoryPayload,
 } from './queue.types';
 import { getRedisConnectionOptions } from './queue.config';
 
@@ -61,6 +63,22 @@ export async function enqueueExecutePlan(queue: Queue, payload: ExecutePlanPaylo
 export async function enqueueAnalyzeMessage(queue: Queue, payload: AnalyzeMessagePayload) {
   return queue.add(JOB_ANALYZE_MESSAGE, payload, {
     jobId: `msg-analyze-${payload.messageId}`,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 2000,
+    },
+    removeOnComplete: 100,
+    removeOnFail: 500,
+  });
+}
+
+/**
+ * Enqueues a memory processing job for background chunking and embedding generation.
+ */
+export async function enqueueProcessMemory(queue: Queue, payload: ProcessMemoryPayload) {
+  return queue.add(JOB_PROCESS_MEMORY, payload, {
+    jobId: `mem-process-${payload.memoryId}`,
     attempts: 3,
     backoff: {
       type: 'exponential',

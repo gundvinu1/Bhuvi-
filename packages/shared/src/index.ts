@@ -9,5 +9,6 @@ export * from './types/auth.types';
 export * from './types/ai.types';
 export * from './types/orchestrator.types';
 export * from './types/message.types';
+export * from './types/memory.types';
 export * from './constants/app.constants';
 export * from './utils/type.utils';

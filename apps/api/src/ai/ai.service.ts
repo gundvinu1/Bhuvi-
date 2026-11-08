@@ -1,8 +1,17 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  HttpException,
+  HttpStatus,
+  Optional,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { AiStatusResponse, AiModelInfo, AiChatResponse } from '@bhuvi/shared';
 import { OllamaProvider } from './ollama.provider';
 import { ChatDto } from './dto/chat.dto';
 import { OllamaChatMessage } from './ai.types';
+import { VectorSearchService } from '../memory/services/vector-search.service';
 
 export const BHUVI_SYSTEM_PROMPT = `You are BHUVI (Brain for Human Virtual Intelligence), a local-first Personal AI Operating System.
 Your core principles:
@@ -22,7 +31,12 @@ export class AiService {
   // Maximum concurrent in-flight inference requests allowed simultaneously on local GPU/CPU hardware
   private readonly maxConcurrentInferences = 1;
 
-  constructor(private readonly ollamaProvider: OllamaProvider) {}
+  constructor(
+    private readonly ollamaProvider: OllamaProvider,
+    @Optional()
+    @Inject(forwardRef(() => VectorSearchService))
+    private readonly vectorSearch?: VectorSearchService,
+  ) {}
 
   getActiveInferences(): number {
     return this.activeInferences;
@@ -71,6 +85,7 @@ export class AiService {
   /**
    * Processes a natural language message with the configured local model.
    * Guarded by in-flight concurrency limiter to protect local hardware.
+   * Supports optional memory context retrieval when useMemory is true.
    */
   async chat(dto: ChatDto, userId: string): Promise<AiChatResponse> {
     if (this.activeInferences >= this.maxConcurrentInferences) {
@@ -87,13 +102,34 @@ export class AiService {
     try {
       const userMessage = dto.message.trim();
       this.logger.log(
-        `Processing AI chat request for user [${userId}] (${userMessage.length} chars)`,
+        `Processing AI chat request for user [${userId}] (${userMessage.length} chars, useMemory=${dto.useMemory ?? false})`,
       );
+
+      let systemPrompt = BHUVI_SYSTEM_PROMPT;
+
+      if (dto.useMemory && this.vectorSearch) {
+        try {
+          const relevant = await this.vectorSearch.searchByText(userId, userMessage, {
+            limit: 3,
+            threshold: 0.5,
+          });
+          if (relevant && relevant.length > 0) {
+            const memoryContext = relevant
+              .map((r, i) => `[Memory #${i + 1}: "${r.title}"] ${r.chunkContent}`)
+              .join('\n\n');
+            systemPrompt += `\n\n<retrieved_memory_context>\nThe following relevant personal memories were retrieved for context:\n${memoryContext}\n</retrieved_memory_context>`;
+          }
+        } catch (memErr: unknown) {
+          this.logger.warn(
+            `Failed to retrieve memory context during chat: ${(memErr as Error).message}`,
+          );
+        }
+      }
 
       const messages: OllamaChatMessage[] = [
         {
           role: 'system',
-          content: BHUVI_SYSTEM_PROMPT,
+          content: systemPrompt,
         },
         {
           role: 'user',

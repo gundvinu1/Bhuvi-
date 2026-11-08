@@ -27,6 +27,10 @@ model User {
   messages     Message[]
   actionItems  MessageActionItem[]
   labels       MessageLabel[]
+  memories     Memory[]
+  memoryChunks MemoryChunk[]
+  memoryTags   MemoryTag[]
+  accessLogs   MemoryAccessLog[]
 
   @@index([email])
   @@map("users")
@@ -239,4 +243,108 @@ model MessageLabelAssignment {
   @@index([messageId])
   @@index([labelId])
   @@map("message_label_assignments")
+}
+
+// ============================================================
+// Module 08: Personal Memory & Knowledge System (RAG)
+// ============================================================
+
+/// Long-term personal memory document model
+model Memory {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  title        String
+  content      String
+  category     String
+  importance   String    @default("MEDIUM")
+  source       String    @default("MANUAL")
+  status       String    @default("PENDING")
+  errorMessage String?   @map("error_message")
+  expiresAt    DateTime? @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks         MemoryChunk[]
+  tagAssignments MemoryTagAssignment[]
+  accessLogs     MemoryAccessLog[]
+
+  @@index([userId])
+  @@index([category])
+  @@index([importance])
+  @@index([status])
+  @@index([createdAt])
+  @@map("memories")
+}
+
+/// Chunked memory segment with local vector embeddings
+model MemoryChunk {
+  id         String   @id @default(uuid())
+  memoryId   String   @map("memory_id")
+  userId     String   @map("user_id")
+  chunkIndex Int      @map("chunk_index")
+  content    String
+  tokenCount Int      @default(0) @map("token_count")
+  embedding  Float[]
+  dimensions Int      @default(0)
+  modelName  String   @default("nomic-embed-text") @map("model_name")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  memory     Memory   @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([memoryId, chunkIndex])
+  @@index([userId])
+  @@index([memoryId])
+  @@map("memory_chunks")
+}
+
+/// Reusable user tags for organizing personal memories
+model MemoryTag {
+  id          String                @id @default(uuid())
+  userId      String                @map("user_id")
+  name        String
+  createdAt   DateTime              @default(now()) @map("created_at")
+
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments MemoryTagAssignment[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("memory_tags")
+}
+
+/// Association between memories and tags
+model MemoryTagAssignment {
+  id       String    @id @default(uuid())
+  memoryId String    @map("memory_id")
+  tagId    String    @map("tag_id")
+
+  memory   Memory    @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  tag      MemoryTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([memoryId, tagId])
+  @@index([memoryId])
+  @@index([tagId])
+  @@map("memory_tag_assignments")
+}
+
+/// Audit and analytics log for memory retrieval and operations
+model MemoryAccessLog {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  memoryId   String?  @map("memory_id")
+  action     String
+  query      String?
+  similarity Float?
+  timestamp  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memory     Memory?  @relation(fields: [memoryId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([memoryId])
+  @@index([action])
+  @@index([timestamp])
+  @@map("memory_access_logs")
 }

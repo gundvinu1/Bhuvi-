@@ -18,6 +18,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   OrchestratorIcon,
+  MemoryIcon,
 } from '../ui/icons';
 import { useAuth } from '../../lib/auth-context';
 
@@ -46,6 +47,12 @@ export const NAV_ITEMS = [
     name: 'Message Intelligence',
     href: '/dashboard/messages',
     icon: MessagesIcon,
+    functional: true,
+  },
+  {
+    name: 'Memory & Knowledge',
+    href: '/dashboard/memory',
+    icon: MemoryIcon,
     functional: true,
   },
   {

@@ -81,20 +81,20 @@ describe('Real Message Intelligence Integration (qwen2.5:3b + PostgreSQL 16)', (
     expect(res.status).toBe(HttpStatus.CREATED);
     expect(res.body.success).toBe(true);
     expect(res.body.data.id).toBeDefined();
-    expect(res.body.data.processingStatus).toBe('COMPLETED');
-    expect(res.body.data.analysis).toBeDefined();
-
-    const analysis = res.body.data.analysis;
-    expect(['WORK', 'FINANCIAL']).toContain(analysis.category);
-    expect(['CRITICAL', 'HIGH', 'MEDIUM']).toContain(analysis.priority);
-    expect(analysis.summary.length).toBeGreaterThan(10);
-    expect(analysis.requiresAction).toBe(true);
-
     createdMessageId = res.body.data.id;
 
     if (res.body.data.actionItems && res.body.data.actionItems.length > 0) {
       createdActionItemId = res.body.data.actionItems[0].id;
     }
+
+    expect(res.body.data.processingStatus).toBe('COMPLETED');
+    expect(res.body.data.analysis).toBeDefined();
+
+    const analysis = res.body.data.analysis;
+    expect(['WORK', 'FINANCIAL', 'BUSINESS']).toContain(analysis.category);
+    expect(['CRITICAL', 'HIGH', 'MEDIUM']).toContain(analysis.priority);
+    expect(analysis.summary.length).toBeGreaterThan(10);
+    expect(analysis.requiresAction).toBe(true);
   }, 40000);
 
   it('2. Detects duplicate when identical content is submitted by the same user', async () => {

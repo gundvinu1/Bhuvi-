@@ -8,6 +8,7 @@ import {
   JOB_INFRASTRUCTURE_CHECK,
   JOB_EXECUTE_PLAN,
   JOB_ANALYZE_MESSAGE,
+  JOB_PROCESS_MEMORY,
   getRedisConnectionOptions,
   getSanitizedRedisConfig,
   InfrastructureCheckPayload,
@@ -16,6 +17,8 @@ import {
   ExecutePlanResult,
   AnalyzeMessagePayload,
   AnalyzeMessageResult,
+  ProcessMemoryPayload,
+  ProcessMemoryResult,
 } from '@bhuvi/queue';
 
 // ============================================================
@@ -279,6 +282,59 @@ export class BhuviWorker {
 
       const result: AnalyzeMessageResult = {
         messageId: payload.messageId,
+        status: 'COMPLETED',
+      };
+      return result;
+    }
+
+    if (job.name === JOB_PROCESS_MEMORY) {
+      const payload = job.data as ProcessMemoryPayload;
+      this.logger.log(
+        `Processing process-memory job (memoryId: ${payload.memoryId}, userId: ${payload.userId})`,
+      );
+
+      if (this.prisma) {
+        try {
+          const memory = await this.prisma.memory.findUnique({
+            where: { id: payload.memoryId },
+            include: { chunks: true },
+          });
+
+          if (!memory) {
+            this.logger.warn(`Memory ${payload.memoryId} not found in database. Skipping.`);
+            const failedResult: ProcessMemoryResult = {
+              memoryId: payload.memoryId,
+              status: 'FAILED',
+              error: 'Memory not found in database',
+            };
+            return failedResult;
+          }
+
+          if (memory.status === 'COMPLETED' && !payload.force) {
+            this.logger.log(
+              `Memory ${payload.memoryId} is already processed. Skipping redundant worker job.`,
+            );
+            const skippedResult: ProcessMemoryResult = {
+              memoryId: payload.memoryId,
+              status: 'SKIPPED',
+              chunksCount: memory.chunks.length,
+            };
+            return skippedResult;
+          }
+
+          await this.prisma.memory.update({
+            where: { id: payload.memoryId },
+            data: { status: 'PROCESSING' },
+          });
+        } catch (dbErr: unknown) {
+          this.logger.warn(
+            `Database check during process-memory job failed: ${(dbErr as Error).message}`,
+          );
+        }
+      }
+
+      const result: ProcessMemoryResult = {
+        memoryId: payload.memoryId,
         status: 'COMPLETED',
       };
       return result;

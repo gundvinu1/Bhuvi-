@@ -57,13 +57,16 @@ ollama list
 # 3. Pull recommended lightweight model (qwen2.5:3b, ~1.9 GB)
 ollama pull qwen2.5:3b
 
-# 4. (Optional) Pull alternative fallback model (llama3.2:3b, ~2.0 GB)
+# 4. Pull local embedding model (nomic-embed-text, ~274 MB)
+ollama pull nomic-embed-text
+
+# 5. (Optional) Pull alternative fallback model (llama3.2:3b, ~2.0 GB)
 ollama pull llama3.2:3b
 
-# 5. Start Ollama server (if not already running as a Windows service)
+# 6. Start Ollama server (if not already running as a Windows service)
 ollama serve
 
-# 6. Test direct model inference
+# 7. Test direct model inference
 ollama run qwen2.5:3b "Hello BHUVI!"
 ```
 
@@ -126,3 +129,4 @@ pnpm db:studio       # Launch Prisma Studio data browser
 - **Module 05: AI Brain & Model Integration:** COMPLETE (Local Ollama integration at `127.0.0.1:11434`, `qwen2.5:3b` model, live conversational assistant panel, rate-limited & concurrency-guarded `/api/v1/ai/chat`, standardized `{ "message": "..." }` contract, zero paid APIs)
 - **Module 06: AI Agent Orchestrator:** COMPLETE (Multi-agent orchestration pipeline, 4 logical agents: Planning, Research, Communication, Task; topological cycle resolution, human approval boundary, PostgreSQL persistence, `/dashboard/orchestrator` console, worker execution)
 - **Module 07: Message Intelligence Engine:** COMPLETE (Message classification across 10 categories, priority & urgency detection, action item extraction, duplicate detection, prompt injection defense, `/dashboard/messages` UI, background worker integration)
+- **Module 08: Personal Memory & Knowledge System:** COMPLETE (Local-first long-term memory, dense embeddings via `nomic-embed-text` with dynamic dimensions, native PostgreSQL vector storage, cosine similarity search, grounded RAG with source citations, `/dashboard/memory` UI, worker pipeline)

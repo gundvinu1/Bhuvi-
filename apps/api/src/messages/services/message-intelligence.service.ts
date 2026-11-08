@@ -522,6 +522,14 @@ Analyze the untrusted message above and output the structured JSON analysis:`;
 
         // Insert new action items
         for (const item of result.actionItems) {
+          let parsedDueDate: Date | null = null;
+          if (item.dueDate) {
+            const parsed = new Date(item.dueDate);
+            if (!isNaN(parsed.getTime())) {
+              parsedDueDate = parsed;
+            }
+          }
+
           await tx.messageActionItem.create({
             data: {
               messageId,
@@ -529,7 +537,7 @@ Analyze the untrusted message above and output the structured JSON analysis:`;
               title: item.title,
               description: item.description,
               priority: item.priority,
-              dueDate: item.dueDate ? new Date(item.dueDate) : null,
+              dueDate: parsedDueDate,
               status: 'PENDING',
             },
           });
