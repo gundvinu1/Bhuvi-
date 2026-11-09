@@ -248,8 +248,30 @@ pnpm test          → PASS (25 suites, 130 tests passed across monorepo)
 
 ---
 
+## Module 10 — WhatsApp Integration Acceptance & Security Audit Criteria
+
+### ✅ All Implementation & Security Criteria Met
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Official Meta WhatsApp Cloud API (v20.0+) | ✅ | 100% official Cloud API; zero browser automation, unofficial libraries, reverse-engineering, or scraping |
+| Multi-Account Phone Number Support | ✅ | Single user connects multiple WhatsApp accounts/numbers independently; verified by `whatsapp-connection.service.spec.ts` |
+| AES-256-GCM Token Encryption | ✅ | `WhatsAppEncryptionService` encrypts access tokens with 12-byte IV and 16-byte auth tag; verified by `whatsapp-encryption.service.spec.ts` |
+| Webhook Verification & HMAC-SHA256 Security | ✅ | Constant-time `crypto.timingSafeEqual` signature check against `X-Hub-Signature-256`; verified by `whatsapp-webhook.service.spec.ts` |
+| Idempotent Deduplication Registry | ✅ | `WhatsAppWebhookEvent` uniquely keyed on `eventId`; duplicate webhooks skipped safely without duplicate persistence |
+| Asynchronous BullMQ Processing | ✅ | Queue jobs `process-whatsapp-webhook`, `send-whatsapp-approved-message`, `update-whatsapp-message-status` handled by worker |
+| Module 07 Intelligence Ingestion | ✅ | Worker creates `Message` (`source: 'WHATSAPP'`) and `MessageAnalysis` extracting urgency, priority, category, action items |
+| Local Ollama Conversation Summaries & Replies | ✅ | `WhatsAppAiService` generates grounded summaries, extracts action items, and suggests tone-tailored replies |
+| Grounded Q&A with Citations | ✅ | `askWhatsApp` retrieves user-scoped messages with citations; honest fallback on empty results |
+| Strict Outbound Human Approval Policy | ✅ | Drafts strictly created in `PENDING_APPROVAL`; `sendDraft` rejects any unapproved draft (`ForbiddenException`); explicit confirmation dialog in web UI |
+| Unified Inbox & Split Conversation UI | ✅ | `/dashboard/whatsapp` with account filtering, contact search, message timeline, AI summaries, and approval modal |
+| Full Monorepo Quality Gates | ✅ | 360/360 API tests passed, 27/27 Worker tests passed, 49/49 Web tests passed; 0 failures |
+
+---
+
 ## Next Steps
 
-> 🛑 **Module 09 implementation & multi-account enhancement are COMPLETE. Awaiting user review and explicit approval before starting Module 10 (WhatsApp Integration).**
+> 🛑 **Module 10 implementation is COMPLETE. Awaiting user review and explicit approval before starting Module 11.**
+
 
 ```

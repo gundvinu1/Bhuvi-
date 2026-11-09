@@ -6,6 +6,9 @@ import {
   JOB_ANALYZE_MESSAGE,
   JOB_PROCESS_MEMORY,
   JOB_SYNC_GMAIL,
+  JOB_PROCESS_WHATSAPP_WEBHOOK,
+  JOB_SEND_WHATSAPP_APPROVED_MESSAGE,
+  JOB_UPDATE_WHATSAPP_MESSAGE_STATUS,
 } from './queue.constants';
 import {
   InfrastructureCheckPayload,
@@ -13,6 +16,9 @@ import {
   AnalyzeMessagePayload,
   ProcessMemoryPayload,
   SyncGmailPayload,
+  ProcessWhatsAppWebhookPayload,
+  SendWhatsAppApprovedMessagePayload,
+  UpdateWhatsAppMessageStatusPayload,
 } from './queue.types';
 import { getRedisConnectionOptions } from './queue.config';
 
@@ -104,5 +110,62 @@ export async function enqueueSyncGmail(queue: Queue, payload: SyncGmailPayload) 
     },
     removeOnComplete: 50,
     removeOnFail: 200,
+  });
+}
+
+/**
+ * Enqueues a WhatsApp webhook processing job.
+ */
+export async function enqueueProcessWhatsAppWebhook(
+  queue: Queue,
+  payload: ProcessWhatsAppWebhookPayload,
+) {
+  return queue.add(JOB_PROCESS_WHATSAPP_WEBHOOK, payload, {
+    jobId: `wa-webhook-${payload.eventId}`,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 2000,
+    },
+    removeOnComplete: 100,
+    removeOnFail: 500,
+  });
+}
+
+/**
+ * Enqueues an approved WhatsApp message send job.
+ */
+export async function enqueueSendWhatsAppApprovedMessage(
+  queue: Queue,
+  payload: SendWhatsAppApprovedMessagePayload,
+) {
+  return queue.add(JOB_SEND_WHATSAPP_APPROVED_MESSAGE, payload, {
+    jobId: `wa-send-${payload.draftId}`,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 2000,
+    },
+    removeOnComplete: 100,
+    removeOnFail: 500,
+  });
+}
+
+/**
+ * Enqueues a WhatsApp message status update job.
+ */
+export async function enqueueUpdateWhatsAppMessageStatus(
+  queue: Queue,
+  payload: UpdateWhatsAppMessageStatusPayload,
+) {
+  return queue.add(JOB_UPDATE_WHATSAPP_MESSAGE_STATUS, payload, {
+    jobId: `wa-status-${payload.eventId}-${payload.status}`,
+    attempts: 3,
+    backoff: {
+      type: 'exponential',
+      delay: 1000,
+    },
+    removeOnComplete: 100,
+    removeOnFail: 500,
   });
 }

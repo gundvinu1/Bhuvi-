@@ -11,5 +11,6 @@ export * from './types/orchestrator.types';
 export * from './types/message.types';
 export * from './types/memory.types';
 export * from './types/gmail.types';
+export * from './types/whatsapp.types';
 export * from './constants/app.constants';
 export * from './utils/type.utils';

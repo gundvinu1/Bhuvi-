@@ -62,6 +62,12 @@ export const NAV_ITEMS = [
     functional: true,
   },
   {
+    name: 'WhatsApp Business',
+    href: '/dashboard/whatsapp',
+    icon: MessagesIcon,
+    functional: true,
+  },
+  {
     name: 'Tasks',
     href: '#',
     icon: TasksIcon,

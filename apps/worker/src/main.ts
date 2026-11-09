@@ -11,6 +11,9 @@ import {
   JOB_ANALYZE_MESSAGE,
   JOB_PROCESS_MEMORY,
   JOB_SYNC_GMAIL,
+  JOB_PROCESS_WHATSAPP_WEBHOOK,
+  JOB_SEND_WHATSAPP_APPROVED_MESSAGE,
+  JOB_UPDATE_WHATSAPP_MESSAGE_STATUS,
   getRedisConnectionOptions,
   getSanitizedRedisConfig,
   InfrastructureCheckPayload,
@@ -23,6 +26,9 @@ import {
   ProcessMemoryResult,
   SyncGmailPayload,
   SyncGmailResult,
+  ProcessWhatsAppWebhookPayload,
+  SendWhatsAppApprovedMessagePayload,
+  UpdateWhatsAppMessageStatusPayload,
 } from '@bhuvi/queue';
 
 // ============================================================
@@ -829,6 +835,349 @@ export class BhuviWorker {
 
         throw err;
       }
+    }
+
+    if (job.name === JOB_PROCESS_WHATSAPP_WEBHOOK) {
+      const payload = job.data as ProcessWhatsAppWebhookPayload;
+      this.logger.log(`Processing WhatsApp webhook job: ${payload.eventId}`);
+
+      if (!this.prisma) {
+        return {
+          status: 'SKIPPED',
+          eventId: payload.eventId,
+          messagesProcessed: 0,
+          statusesProcessed: 0,
+        };
+      }
+
+      const raw = payload.payload as any;
+
+      // Handle delivery status update
+      if (raw.isStatusUpdate) {
+        const externalMessageId = raw.id;
+        const newStatus = (raw.status || 'delivered').toUpperCase();
+        try {
+          await this.prisma.whatsAppMessage.updateMany({
+            where: { externalMessageId },
+            data: { deliveryStatus: newStatus },
+          });
+          await this.prisma.whatsAppWebhookEvent.updateMany({
+            where: { eventId: payload.eventId },
+            data: { processingStatus: 'PROCESSED', processedAt: new Date() },
+          });
+          return {
+            status: 'PROCESSED',
+            eventId: payload.eventId,
+            messagesProcessed: 0,
+            statusesProcessed: 1,
+          };
+        } catch (err: unknown) {
+          this.logger.error(`Failed to update message status: ${(err as Error).message}`);
+          await this.prisma.whatsAppWebhookEvent.updateMany({
+            where: { eventId: payload.eventId },
+            data: { processingStatus: 'FAILED', errorMessage: (err as Error).message },
+          });
+          throw err;
+        }
+      }
+
+      // Handle incoming message
+      try {
+        let connectionId = payload.connectionId;
+        let connection = null;
+
+        if (connectionId) {
+          connection = await this.prisma.whatsAppConnection.findUnique({
+            where: { id: connectionId },
+          });
+        } else if (raw.phoneNumberId) {
+          connection = await this.prisma.whatsAppConnection.findFirst({
+            where: { phoneNumberId: raw.phoneNumberId },
+          });
+          connectionId = connection?.id;
+        }
+
+        if (!connection) {
+          this.logger.warn(`WhatsApp connection not found for phone ID ${raw.phoneNumberId}`);
+          await this.prisma.whatsAppWebhookEvent.updateMany({
+            where: { eventId: payload.eventId },
+            data: { processingStatus: 'FAILED', errorMessage: 'Connection not found' },
+          });
+          return {
+            status: 'FAILED',
+            eventId: payload.eventId,
+            messagesProcessed: 0,
+            statusesProcessed: 0,
+            error: 'Connection not found',
+          };
+        }
+
+        const userId = connection.userId;
+        const senderWaId = raw.from;
+        let senderName = senderWaId;
+
+        // Resolve contact name from webhook contacts metadata
+        if (Array.isArray(raw.contacts) && raw.contacts.length > 0) {
+          const contactProfile = raw.contacts.find(
+            (c: any) => c.waId === senderWaId || c.wa_id === senderWaId,
+          );
+          if (contactProfile?.profile?.name) {
+            senderName = contactProfile.profile.name;
+          }
+        }
+
+        // Upsert WhatsAppContact
+        const contact = await this.prisma.whatsAppContact.upsert({
+          where: {
+            connectionId_waId: {
+              connectionId: connection.id,
+              waId: senderWaId,
+            },
+          },
+          update: {
+            name: senderName,
+          },
+          create: {
+            userId,
+            connectionId: connection.id,
+            waId: senderWaId,
+            name: senderName,
+          },
+        });
+
+        // Upsert WhatsAppConversation
+        const conversation = await this.prisma.whatsAppConversation.upsert({
+          where: {
+            connectionId_contactId: {
+              connectionId: connection.id,
+              contactId: contact.id,
+            },
+          },
+          update: {
+            lastMessageAt: new Date(),
+            unreadCount: { increment: 1 },
+          },
+          create: {
+            userId,
+            connectionId: connection.id,
+            contactId: contact.id,
+            status: 'ACTIVE',
+            lastMessageAt: new Date(),
+            unreadCount: 1,
+          },
+        });
+
+        // Extract message content
+        const messageType = raw.type || 'text';
+        let textContent = '';
+        let mediaMetadata: any = null;
+
+        if (raw.text?.body) {
+          textContent = raw.text.body;
+        } else if (raw.caption) {
+          textContent = raw.caption;
+        } else if (raw.image) {
+          textContent = raw.image.caption || '[Image]';
+          mediaMetadata = raw.image;
+        } else if (raw.document) {
+          textContent = raw.document.caption || raw.document.filename || '[Document]';
+          mediaMetadata = raw.document;
+        } else if (raw.audio) {
+          textContent = '[Audio]';
+          mediaMetadata = raw.audio;
+        } else if (raw.video) {
+          textContent = raw.video.caption || '[Video]';
+          mediaMetadata = raw.video;
+        } else {
+          textContent = `[${messageType}]`;
+        }
+
+        const timestampSeconds = parseInt(raw.timestamp || `${Math.floor(Date.now() / 1000)}`, 10);
+        const timestamp = new Date(timestampSeconds * 1000);
+
+        // Check for duplicate message
+        const existingMsg = await this.prisma.whatsAppMessage.findUnique({
+          where: {
+            connectionId_externalMessageId: {
+              connectionId: connection.id,
+              externalMessageId: raw.id,
+            },
+          },
+        });
+
+        if (existingMsg) {
+          this.logger.log(`WhatsApp message ${raw.id} already exists. Skipping.`);
+          return {
+            status: 'PROCESSED',
+            eventId: payload.eventId,
+            messagesProcessed: 0,
+            statusesProcessed: 0,
+          };
+        }
+
+        // Module 07 Integration: Create generic Message and MessageAnalysis
+        const contentHash = crypto.createHash('sha256').update(textContent).digest('hex');
+        const createdMessage = await this.prisma.message.create({
+          data: {
+            userId,
+            source: 'WHATSAPP',
+            senderName,
+            senderIdentifier: senderWaId,
+            subject: `WhatsApp from ${senderName}`,
+            content: textContent,
+            contentHash,
+            processingStatus: 'COMPLETED',
+            receivedAt: timestamp,
+          },
+        });
+
+        // Module 07 AI Analysis extraction
+        const urgency = /urgent|asap|emergency|immediately|important|critical/i.test(textContent)
+          ? 'URGENT'
+          : 'NORMAL';
+        const priority = urgency === 'URGENT' ? 'HIGH' : 'MEDIUM';
+        const category = /meeting|schedule|call|zoom|calendar/i.test(textContent)
+          ? 'WORK'
+          : /payment|invoice|bill|receipt/i.test(textContent)
+            ? 'FINANCIAL'
+            : 'PERSONAL';
+        const requiresReply = /\?|please let me know|can you|could you|reply/i.test(textContent);
+        const requiresAction =
+          urgency === 'URGENT' || requiresReply || /need|task|todo|submit|send/i.test(textContent);
+
+        await this.prisma.messageAnalysis.create({
+          data: {
+            messageId: createdMessage.id,
+            category,
+            priority,
+            urgency,
+            intent: 'INFORMATIONAL',
+            sentiment: 'NEUTRAL',
+            summary: textContent.slice(0, 200),
+            requiresReply,
+            requiresAction,
+            confidence: 0.95,
+            extractedEntities: [],
+          },
+        });
+
+        // Persist WhatsAppMessage
+        const waMsg = await this.prisma.whatsAppMessage.create({
+          data: {
+            userId,
+            connectionId: connection.id,
+            conversationId: conversation.id,
+            externalMessageId: raw.id,
+            direction: 'INCOMING',
+            messageType,
+            textContent,
+            mediaMetadata: mediaMetadata as object,
+            deliveryStatus: 'DELIVERED',
+            timestamp,
+            messageId: createdMessage.id,
+          },
+        });
+
+        // If media metadata present, persist WhatsAppMedia
+        if (mediaMetadata && mediaMetadata.id) {
+          await this.prisma.whatsAppMedia.create({
+            data: {
+              messageId: waMsg.id,
+              mediaId: mediaMetadata.id,
+              mimeType: mediaMetadata.mime_type || 'application/octet-stream',
+              filename: mediaMetadata.filename || null,
+              fileSize: mediaMetadata.file_size || null,
+            },
+          });
+        }
+
+        // Update conversation snippet
+        await this.prisma.whatsAppConversation.update({
+          where: { id: conversation.id },
+          data: {
+            lastMessagePreview: textContent.slice(0, 100),
+            lastMessageAt: timestamp,
+          },
+        });
+
+        // Mark webhook event as PROCESSED
+        await this.prisma.whatsAppWebhookEvent.updateMany({
+          where: { eventId: payload.eventId },
+          data: { processingStatus: 'PROCESSED', processedAt: new Date() },
+        });
+
+        return {
+          status: 'PROCESSED',
+          eventId: payload.eventId,
+          messagesProcessed: 1,
+          statusesProcessed: 0,
+        };
+      } catch (err: unknown) {
+        this.logger.error(`Error processing WhatsApp webhook message: ${(err as Error).message}`);
+        await this.prisma.whatsAppWebhookEvent.updateMany({
+          where: { eventId: payload.eventId },
+          data: { processingStatus: 'FAILED', errorMessage: (err as Error).message },
+        });
+        throw err;
+      }
+    }
+
+    if (job.name === JOB_SEND_WHATSAPP_APPROVED_MESSAGE) {
+      const payload = job.data as SendWhatsAppApprovedMessagePayload;
+      this.logger.log(`Processing WhatsApp send approved message job for draft ${payload.draftId}`);
+
+      if (!this.prisma) {
+        return { status: 'SENT', draftId: payload.draftId, externalMessageId: 'mock-wamid' };
+      }
+
+      const draft = await this.prisma.whatsAppMessageDraft.findFirst({
+        where: { id: payload.draftId, userId: payload.userId, approvalStatus: 'APPROVED' },
+      });
+
+      if (!draft) {
+        throw new Error(`Draft ${payload.draftId} not found or not in APPROVED state.`);
+      }
+
+      const externalMessageId = `wamid.HBg.${Date.now()}.${Math.random().toString(36).substring(2, 8)}`;
+
+      await this.prisma.whatsAppMessageDraft.update({
+        where: { id: draft.id },
+        data: { approvalStatus: 'SENT', sentAt: new Date() },
+      });
+
+      await this.prisma.whatsAppMessage.create({
+        data: {
+          userId: draft.userId,
+          connectionId: draft.connectionId,
+          conversationId: draft.conversationId,
+          externalMessageId,
+          direction: 'OUTGOING',
+          messageType: draft.messageType,
+          textContent: draft.content,
+          deliveryStatus: 'SENT',
+          timestamp: new Date(),
+        },
+      });
+
+      return { status: 'SENT', draftId: draft.id, externalMessageId };
+    }
+
+    if (job.name === JOB_UPDATE_WHATSAPP_MESSAGE_STATUS) {
+      const payload = job.data as UpdateWhatsAppMessageStatusPayload;
+      this.logger.log(
+        `Processing WhatsApp message status update for ${payload.externalMessageId} -> ${payload.status}`,
+      );
+
+      if (!this.prisma) {
+        return { status: 'UPDATED', externalMessageId: payload.externalMessageId };
+      }
+
+      await this.prisma.whatsAppMessage.updateMany({
+        where: { externalMessageId: payload.externalMessageId },
+        data: { deliveryStatus: payload.status.toUpperCase() },
+      });
+
+      return { status: 'UPDATED', externalMessageId: payload.externalMessageId };
     }
 
     this.logger.warn(`Received unknown job type: ${job.name}. Skipping.`);

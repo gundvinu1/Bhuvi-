@@ -38,6 +38,13 @@ model User {
   gmailAttachments GmailAttachment[]
   gmailSyncStates  GmailSyncState[]
 
+  // Module 10: WhatsApp Integration
+  whatsappConnections   WhatsAppConnection[]
+  whatsappContacts      WhatsAppContact[]
+  whatsappConversations WhatsAppConversation[]
+  whatsappMessages      WhatsAppMessage[]
+  whatsappDrafts        WhatsAppMessageDraft[]
+
   @@index([email])
   @@map("users")
 }
@@ -55,10 +62,10 @@ model AgentPlan {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  steps               AgentPlanStep[]
-  executions          AgentExecution[]
-  approvals           ApprovalRequest[]
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  steps      AgentPlanStep[]
+  executions AgentExecution[]
+  approvals  ApprovalRequest[]
 
   @@index([userId])
   @@index([status])
@@ -83,8 +90,8 @@ model AgentPlanStep {
   startedAt        DateTime? @map("started_at")
   completedAt      DateTime? @map("completed_at")
 
-  plan             AgentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  approvals        ApprovalRequest[]
+  plan      AgentPlan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  approvals ApprovalRequest[]
 
   @@unique([planId, stepKey])
   @@index([planId])
@@ -103,7 +110,7 @@ model AgentExecution {
   triggerSource String    @default("MANUAL") @map("trigger_source")
   logs          Json?
 
-  plan          AgentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  plan AgentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([planId])
   @@index([status])
@@ -126,9 +133,9 @@ model ApprovalRequest {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan           AgentPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
-  step           AgentPlanStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan AgentPlan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  step AgentPlanStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([planId])
@@ -160,6 +167,7 @@ model Message {
   actionItems      MessageActionItem[]
   labelAssignments MessageLabelAssignment[]
   gmailMessage     GmailMessage?
+  whatsappMessage  WhatsAppMessage?
 
   @@index([userId])
   @@index([processingStatus])
@@ -187,7 +195,7 @@ model MessageAnalysis {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  message             Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([category])
   @@index([priority])
@@ -210,8 +218,8 @@ model MessageActionItem {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  message     Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([messageId])
@@ -222,12 +230,12 @@ model MessageActionItem {
 
 /// User-defined or automated message category tag
 model MessageLabel {
-  id          String                   @id @default(uuid())
-  userId      String                   @map("user_id")
-  name        String
-  color       String?
-  createdAt   DateTime                 @default(now()) @map("created_at")
-  updatedAt   DateTime                 @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String
+  color     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   user        User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   assignments MessageLabelAssignment[]
@@ -239,12 +247,12 @@ model MessageLabel {
 
 /// Join table for messages and labels
 model MessageLabelAssignment {
-  id        String       @id @default(uuid())
-  messageId String       @map("message_id")
-  labelId   String       @map("label_id")
+  id        String @id @default(uuid())
+  messageId String @map("message_id")
+  labelId   String @map("label_id")
 
-  message   Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  label     MessageLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  message Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  label   MessageLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, labelId])
   @@index([messageId])
@@ -297,8 +305,8 @@ model MemoryChunk {
   modelName  String   @default("nomic-embed-text") @map("model_name")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  memory     Memory   @relation(fields: [memoryId], references: [id], onDelete: Cascade)
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memory Memory @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([memoryId, chunkIndex])
   @@index([userId])
@@ -308,10 +316,10 @@ model MemoryChunk {
 
 /// Reusable user tags for organizing personal memories
 model MemoryTag {
-  id          String                @id @default(uuid())
-  userId      String                @map("user_id")
-  name        String
-  createdAt   DateTime              @default(now()) @map("created_at")
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
 
   user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   assignments MemoryTagAssignment[]
@@ -323,12 +331,12 @@ model MemoryTag {
 
 /// Association between memories and tags
 model MemoryTagAssignment {
-  id       String    @id @default(uuid())
-  memoryId String    @map("memory_id")
-  tagId    String    @map("tag_id")
+  id       String @id @default(uuid())
+  memoryId String @map("memory_id")
+  tagId    String @map("tag_id")
 
-  memory   Memory    @relation(fields: [memoryId], references: [id], onDelete: Cascade)
-  tag      MemoryTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  memory Memory    @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+  tag    MemoryTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([memoryId, tagId])
   @@index([memoryId])
@@ -346,8 +354,8 @@ model MemoryAccessLog {
   similarity Float?
   timestamp  DateTime @default(now())
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  memory     Memory?  @relation(fields: [memoryId], references: [id], onDelete: SetNull)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memory Memory? @relation(fields: [memoryId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([memoryId])
@@ -376,9 +384,9 @@ model GmailConnection {
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages              GmailMessage[]
-  syncStates            GmailSyncState[]
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages   GmailMessage[]
+  syncStates GmailSyncState[]
 
   @@unique([userId, googleAccountEmail])
   @@index([userId])
@@ -388,32 +396,32 @@ model GmailConnection {
 
 /// Synchronized Gmail email message
 model GmailMessage {
-  id                String    @id @default(uuid())
-  userId            String    @map("user_id")
-  gmailConnectionId String    @map("gmail_connection_id")
-  providerMessageId String    @map("provider_message_id")
-  providerThreadId  String    @map("provider_thread_id")
-  senderName        String?   @map("sender_name")
-  senderEmail       String    @map("sender_email")
-  recipientEmails   String[]  @default([]) @map("recipient_emails")
-  ccEmails          String[]  @default([]) @map("cc_emails")
-  subject           String    @default("")
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  gmailConnectionId String   @map("gmail_connection_id")
+  providerMessageId String   @map("provider_message_id")
+  providerThreadId  String   @map("provider_thread_id")
+  senderName        String?  @map("sender_name")
+  senderEmail       String   @map("sender_email")
+  recipientEmails   String[] @default([]) @map("recipient_emails")
+  ccEmails          String[] @default([]) @map("cc_emails")
+  subject           String   @default("")
   snippet           String?
-  bodyText          String    @map("body_text")
-  bodyHtml          String?   @map("body_html")
-  receivedAt        DateTime  @map("received_at")
-  isRead            Boolean   @default(false) @map("is_read")
-  hasAttachments    Boolean   @default(false) @map("has_attachments")
-  labels            String[]  @default([])
-  syncStatus        String    @default("SYNCHRONIZED") @map("sync_status")
-  messageId         String?   @unique @map("message_id")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  bodyText          String   @map("body_text")
+  bodyHtml          String?  @map("body_html")
+  receivedAt        DateTime @map("received_at")
+  isRead            Boolean  @default(false) @map("is_read")
+  hasAttachments    Boolean  @default(false) @map("has_attachments")
+  labels            String[] @default([])
+  syncStatus        String   @default("SYNCHRONIZED") @map("sync_status")
+  messageId         String?  @unique @map("message_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
-  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  connection        GmailConnection   @relation(fields: [gmailConnectionId], references: [id], onDelete: Cascade)
-  message           Message?          @relation(fields: [messageId], references: [id], onDelete: SetNull)
-  attachments       GmailAttachment[]
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection  GmailConnection   @relation(fields: [gmailConnectionId], references: [id], onDelete: Cascade)
+  message     Message?          @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  attachments GmailAttachment[]
 
   @@unique([gmailConnectionId, providerMessageId])
   @@index([userId])
@@ -427,18 +435,18 @@ model GmailMessage {
 
 /// Metadata for attachments on a synchronized Gmail message
 model GmailAttachment {
-  id                   String       @id @default(uuid())
-  userId               String       @map("user_id")
-  gmailMessageId       String       @map("gmail_message_id")
-  providerAttachmentId String       @map("provider_attachment_id")
+  id                   String   @id @default(uuid())
+  userId               String   @map("user_id")
+  gmailMessageId       String   @map("gmail_message_id")
+  providerAttachmentId String   @map("provider_attachment_id")
   filename             String
-  mimeType             String       @map("mime_type")
-  size                 Int          @default(0)
-  downloadStatus       String       @default("METADATA_ONLY") @map("download_status")
-  createdAt            DateTime     @default(now()) @map("created_at")
+  mimeType             String   @map("mime_type")
+  size                 Int      @default(0)
+  downloadStatus       String   @default("METADATA_ONLY") @map("download_status")
+  createdAt            DateTime @default(now()) @map("created_at")
 
-  user                 User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  message              GmailMessage @relation(fields: [gmailMessageId], references: [id], onDelete: Cascade)
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message GmailMessage @relation(fields: [gmailMessageId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([gmailMessageId])
@@ -447,23 +455,207 @@ model GmailAttachment {
 
 /// Synchronization run state and telemetry for Gmail
 model GmailSyncState {
-  id                   String          @id @default(uuid())
-  userId               String          @map("user_id")
-  gmailConnectionId    String          @map("gmail_connection_id")
-  lastHistoryId        String?         @map("last_history_id")
-  lastSuccessfulSyncAt DateTime?       @map("last_successful_sync_at")
-  lastAttemptAt        DateTime        @default(now()) @map("last_attempt_at")
-  syncStatus           String          @default("IDLE") @map("sync_status")
-  errorMessage         String?         @map("error_message")
-  syncedCount          Int             @default(0) @map("synced_count")
-  createdAt            DateTime        @default(now()) @map("created_at")
-  updatedAt            DateTime        @updatedAt @map("updated_at")
+  id                   String    @id @default(uuid())
+  userId               String    @map("user_id")
+  gmailConnectionId    String    @map("gmail_connection_id")
+  lastHistoryId        String?   @map("last_history_id")
+  lastSuccessfulSyncAt DateTime? @map("last_successful_sync_at")
+  lastAttemptAt        DateTime  @default(now()) @map("last_attempt_at")
+  syncStatus           String    @default("IDLE") @map("sync_status")
+  errorMessage         String?   @map("error_message")
+  syncedCount          Int       @default(0) @map("synced_count")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
-  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  connection           GmailConnection @relation(fields: [gmailConnectionId], references: [id], onDelete: Cascade)
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection GmailConnection @relation(fields: [gmailConnectionId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([gmailConnectionId])
   @@index([syncStatus])
   @@map("gmail_sync_states")
+}
+
+// ============================================================
+// Module 10: WhatsApp Business Integration
+// ============================================================
+
+/// WhatsApp Business Account connection for a user
+model WhatsAppConnection {
+  id                   String    @id @default(uuid())
+  userId               String    @map("user_id")
+  businessAccountId    String    @map("business_account_id")
+  phoneNumberId        String    @map("phone_number_id")
+  displayPhoneNumber   String    @map("display_phone_number")
+  displayName          String    @map("display_name")
+  encryptedAccessToken String    @map("encrypted_access_token")
+  tokenIV              String    @map("token_iv")
+  tokenAuthTag         String    @map("token_auth_tag")
+  status               String    @default("CONNECTED") // CONNECTED, DISCONNECTED, ERROR
+  lastActivityAt       DateTime? @map("last_activity_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contacts      WhatsAppContact[]
+  conversations WhatsAppConversation[]
+  messages      WhatsAppMessage[]
+  webhookEvents WhatsAppWebhookEvent[]
+  drafts        WhatsAppMessageDraft[]
+
+  @@unique([userId, phoneNumberId])
+  @@index([userId])
+  @@index([phoneNumberId])
+  @@index([status])
+  @@map("whatsapp_connections")
+}
+
+/// Resolved WhatsApp Contact / Customer Profile
+model WhatsAppContact {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  connectionId String   @map("connection_id")
+  waId         String   @map("wa_id") // WhatsApp ID / phone number
+  name         String?
+  profileData  Json?    @map("profile_data")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection    WhatsAppConnection     @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  conversations WhatsAppConversation[]
+
+  @@unique([connectionId, waId])
+  @@index([userId])
+  @@index([connectionId])
+  @@index([waId])
+  @@map("whatsapp_contacts")
+}
+
+/// WhatsApp Conversation Thread between a business number and a contact
+model WhatsAppConversation {
+  id                 String    @id @default(uuid())
+  userId             String    @map("user_id")
+  connectionId       String    @map("connection_id")
+  contactId          String    @map("contact_id")
+  status             String    @default("ACTIVE") // ACTIVE, ARCHIVED, SPAM
+  lastMessageAt      DateTime? @map("last_message_at")
+  lastMessagePreview String?   @map("last_message_preview")
+  unreadCount        Int       @default(0) @map("unread_count")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection WhatsAppConnection     @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  contact    WhatsAppContact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  messages   WhatsAppMessage[]
+  drafts     WhatsAppMessageDraft[]
+
+  @@unique([connectionId, contactId])
+  @@index([userId])
+  @@index([connectionId])
+  @@index([contactId])
+  @@index([lastMessageAt])
+  @@map("whatsapp_conversations")
+}
+
+/// Incoming or Outgoing WhatsApp message
+model WhatsAppMessage {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  connectionId      String   @map("connection_id")
+  conversationId    String   @map("conversation_id")
+  externalMessageId String   @map("external_message_id") // Meta wamid.HBg...
+  direction         String   @map("direction") // INCOMING, OUTGOING
+  messageType       String   @map("message_type") // text, image, document, audio, video, location, contacts, interactive
+  textContent       String?  @map("text_content")
+  mediaMetadata     Json?    @map("media_metadata")
+  deliveryStatus    String   @default("DELIVERED") @map("delivery_status") // SENT, DELIVERED, READ, FAILED
+  timestamp         DateTime @map("timestamp")
+  messageId         String?  @unique @map("message_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection   WhatsAppConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  conversation WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  message      Message?             @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  media        WhatsAppMedia[]
+
+  @@unique([connectionId, externalMessageId])
+  @@index([userId])
+  @@index([connectionId])
+  @@index([conversationId])
+  @@index([externalMessageId])
+  @@index([timestamp])
+  @@index([direction])
+  @@index([deliveryStatus])
+  @@map("whatsapp_messages")
+}
+
+/// Metadata and storage reference for media attached to a WhatsApp message
+model WhatsAppMedia {
+  id          String   @id @default(uuid())
+  messageId   String   @map("message_id")
+  mediaId     String   @map("media_id")
+  mimeType    String   @map("mime_type")
+  filename    String?
+  fileSize    Int?     @map("file_size")
+  storagePath String?  @map("storage_path")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  message WhatsAppMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@index([mediaId])
+  @@map("whatsapp_media")
+}
+
+/// Raw Meta webhook event audit and deduplication log
+model WhatsAppWebhookEvent {
+  id               String    @id @default(uuid())
+  connectionId     String?   @map("connection_id")
+  eventId          String    @unique @map("event_id") // Meta deduplication key / wamid
+  eventType        String    @map("event_type") // messages, message_status
+  payload          Json
+  processingStatus String    @default("PENDING") @map("processing_status") // PENDING, PROCESSED, FAILED
+  receivedAt       DateTime  @default(now()) @map("received_at")
+  processedAt      DateTime? @map("processed_at")
+  errorMessage     String?   @map("error_message")
+
+  connection WhatsAppConnection? @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([connectionId])
+  @@index([processingStatus])
+  @@index([receivedAt])
+  @@map("whatsapp_webhook_events")
+}
+
+/// Outbound WhatsApp message draft requiring explicit human approval
+model WhatsAppMessageDraft {
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  connectionId     String    @map("connection_id")
+  conversationId   String    @map("conversation_id")
+  recipientPhone   String    @map("recipient_phone")
+  messageType      String    @default("text") @map("message_type")
+  content          String
+  templateName     String?   @map("template_name")
+  templateParams   Json?     @map("template_params")
+  approvalStatus   String    @default("PENDING_APPROVAL") @map("approval_status") // PENDING_APPROVAL, APPROVED, REJECTED, SENT
+  approvedByUserId String?   @map("approved_by_user_id")
+  approvedAt       DateTime? @map("approved_at")
+  sentAt           DateTime? @map("sent_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection   WhatsAppConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  conversation WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([connectionId])
+  @@index([conversationId])
+  @@index([approvalStatus])
+  @@map("whatsapp_message_drafts")
 }

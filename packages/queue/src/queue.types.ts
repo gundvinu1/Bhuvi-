@@ -82,3 +82,59 @@ export interface SyncGmailResult {
   newHistoryId?: string;
   error?: string;
 }
+
+// Module 10: WhatsApp Integration
+export interface ProcessWhatsAppWebhookPayload {
+  eventId: string;
+  payload: Record<string, unknown>;
+  connectionId?: string;
+}
+
+export interface ProcessWhatsAppWebhookResult {
+  status: 'PROCESSED' | 'FAILED' | 'SKIPPED';
+  eventId: string;
+  messagesProcessed: number;
+  statusesProcessed: number;
+  error?: string;
+}
+
+export interface ProcessWhatsAppMessagePayload {
+  messageId: string;
+  connectionId: string;
+  userId: string;
+  externalMessageId: string;
+}
+
+export interface ProcessWhatsAppMessageResult {
+  status: 'PROCESSED' | 'FAILED';
+  messageId: string;
+  analysisId?: string;
+  error?: string;
+}
+
+export interface SendWhatsAppApprovedMessagePayload {
+  draftId: string;
+  userId: string;
+  connectionId: string;
+}
+
+export interface SendWhatsAppApprovedMessageResult {
+  status: 'SENT' | 'FAILED';
+  draftId: string;
+  externalMessageId?: string;
+  error?: string;
+}
+
+export interface UpdateWhatsAppMessageStatusPayload {
+  eventId: string;
+  externalMessageId: string;
+  status: 'sent' | 'delivered' | 'read' | 'failed';
+  timestamp: string;
+  connectionId?: string;
+}
+
+export interface UpdateWhatsAppMessageStatusResult {
+  status: 'UPDATED' | 'NOT_FOUND' | 'FAILED';
+  externalMessageId: string;
+  error?: string;
+}
