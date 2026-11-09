@@ -33,6 +33,12 @@ describe('GmailOAuthService', () => {
     service = new GmailOAuthService(prisma as PrismaService, tokenEncryption);
   });
 
+  afterEach(async () => {
+    if (service) {
+      await service.onModuleDestroy();
+    }
+  });
+
   afterAll(() => {
     if (originalClientId) process.env['GOOGLE_CLIENT_ID'] = originalClientId;
     else delete process.env['GOOGLE_CLIENT_ID'];
@@ -52,17 +58,17 @@ describe('GmailOAuthService', () => {
   });
 
   describe('generateState & validateState', () => {
-    it('should generate a valid signed state token and extract userId upon validation', () => {
+    it('should generate a valid signed state token and extract userId upon validation', async () => {
       const userId = 'user-alice-123';
       const state = service.generateState(userId);
 
       expect(typeof state).toBe('string');
-      const validation = service.validateState(state);
+      const validation = await service.validateState(state);
       expect(validation.valid).toBe(true);
       expect(validation.userId).toBe(userId);
     });
 
-    it('should reject state with altered HMAC or tampered userId', () => {
+    it('should reject state with altered HMAC or tampered userId', async () => {
       const state = service.generateState('user-alice-123');
       const decoded = Buffer.from(state, 'base64url').toString('utf-8');
       const parts = decoded.split(':');
@@ -70,24 +76,49 @@ describe('GmailOAuthService', () => {
       parts[0] = 'user-hacker-666';
       const tamperedState = Buffer.from(parts.join(':')).toString('base64url');
 
-      const validation = service.validateState(tamperedState);
+      const validation = await service.validateState(tamperedState);
       expect(validation.valid).toBe(false);
     });
 
-    it('should reject state that has expired (> 15 minutes old)', () => {
+    it('should reject state that has expired (> 15 minutes old)', async () => {
       const secret = process.env['JWT_SECRET'] || 'bhuvi_state_secret_key';
       const expiredTimestamp = (Date.now() - 20 * 60 * 1000).toString(); // 20 minutes ago
       const data = `user-123:${expiredTimestamp}:nonce123`;
       const hmac = crypto.createHmac('sha256', secret).update(data).digest('hex');
       const expiredState = Buffer.from(`${data}:${hmac}`).toString('base64url');
 
-      const validation = service.validateState(expiredState);
+      const validation = await service.validateState(expiredState);
       expect(validation.valid).toBe(false);
     });
 
-    it('should reject completely malformed or empty state', () => {
-      expect(service.validateState('').valid).toBe(false);
-      expect(service.validateState('not_base64_encoded').valid).toBe(false);
+    it('should reject completely malformed or empty state', async () => {
+      expect((await service.validateState('')).valid).toBe(false);
+      expect((await service.validateState('not_base64_encoded')).valid).toBe(false);
+    });
+
+    it('should prevent concurrent replay attacks atomically', async () => {
+      const state = service.generateState('user-concurrent-1');
+      const [res1, res2] = await Promise.all([
+        service.validateState(state, true),
+        service.validateState(state, true),
+      ]);
+      const validCount = [res1.valid, res2.valid].filter(Boolean).length;
+      expect(validCount).toBe(1);
+    });
+
+    it('should reject replay across separate API instances sharing Redis (multi-instance/restart)', async () => {
+      const state = service.generateState('user-restart-1');
+      const firstCheck = await service.validateState(state, true);
+      expect(firstCheck.valid).toBe(true);
+
+      // Second instance represents another API pod or a server restart with clean in-memory map
+      const secondInstance = new GmailOAuthService(prisma as PrismaService, tokenEncryption);
+      try {
+        const replayCheck = await secondInstance.validateState(state, true);
+        expect(replayCheck.valid).toBe(false);
+      } finally {
+        await secondInstance.onModuleDestroy();
+      }
     });
   });
 

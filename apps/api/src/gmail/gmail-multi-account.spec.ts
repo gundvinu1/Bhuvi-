@@ -252,7 +252,7 @@ describe('Module 09 Enhancement: Multi-Account Gmail Management Suite', () => {
 
       jest.spyOn(google, 'gmail').mockReturnValue({
         users: { getProfile: getProfileSpy },
-      });
+      } as any);
 
       const res1 = await oauthService.handleCallback('code-1', state1);
       expect(res1.email).toBe('alice.personal@gmail.com');
@@ -294,7 +294,7 @@ describe('Module 09 Enhancement: Multi-Account Gmail Management Suite', () => {
           users: {
             getProfile: jest.fn().mockResolvedValue({ data: { emailAddress: accounts[i] } }),
           },
-        });
+        } as any);
         await oauthService.handleCallback(`code-${i}`, state);
       }
 
@@ -321,7 +321,7 @@ describe('Module 09 Enhancement: Multi-Account Gmail Management Suite', () => {
             .fn()
             .mockResolvedValue({ data: { emailAddress: 'alice.work@corp.com' } }),
         },
-      });
+      } as any);
 
       const res1 = await oauthService.handleCallback('code-initial', state1);
       expect(mockConnections.length).toBe(1);
@@ -350,24 +350,49 @@ describe('Module 09 Enhancement: Multi-Account Gmail Management Suite', () => {
       const state = oauthService.generateState('user-bob-1');
 
       // First validation and consumption succeeds
-      const firstCheck = oauthService.validateState(state, true);
+      const firstCheck = await oauthService.validateState(state, true);
       expect(firstCheck.valid).toBe(true);
       expect(firstCheck.userId).toBe('user-bob-1');
 
       // Second validation with the exact same state MUST be rejected (replay attack defense)
-      const secondCheck = oauthService.validateState(state, true);
+      const secondCheck = await oauthService.validateState(state, true);
       expect(secondCheck.valid).toBe(false);
     });
 
-    it('should reject tampered or cross-user state HMACs', () => {
+    it('should reject tampered or cross-user state HMACs', async () => {
       const state = oauthService.generateState('user-legit-1');
       const rawDecoded = Buffer.from(state, 'base64url').toString('utf-8');
       const parts = rawDecoded.split(':');
-      parts[0] = 'user-attacker-666'; // Maliciously tamper userId in payload
+      // Maliciously tamper userId in payload
+      parts[0] = 'user-attacker-666';
 
       const tamperedState = Buffer.from(parts.join(':')).toString('base64url');
-      const check = oauthService.validateState(tamperedState);
+      const check = await oauthService.validateState(tamperedState);
       expect(check.valid).toBe(false);
+    });
+
+    it('should atomically reject concurrent replay attempts', async () => {
+      const state = oauthService.generateState('user-concurrent-test');
+      const [r1, r2] = await Promise.all([
+        oauthService.validateState(state, true),
+        oauthService.validateState(state, true),
+      ]);
+      const successes = [r1.valid, r2.valid].filter(Boolean).length;
+      expect(successes).toBe(1);
+    });
+
+    it('should reject replay across separate API instances sharing Redis (multi-instance/restart)', async () => {
+      const state = oauthService.generateState('user-multi-inst-1');
+      const first = await oauthService.validateState(state, true);
+      expect(first.valid).toBe(true);
+
+      const secondService = new GmailOAuthService(prisma as PrismaService, tokenEncryption);
+      try {
+        const replay = await secondService.validateState(state, true);
+        expect(replay.valid).toBe(false);
+      } finally {
+        await secondService.onModuleDestroy();
+      }
     });
   });
 
@@ -555,7 +580,7 @@ describe('Module 09 Enhancement: Multi-Account Gmail Management Suite', () => {
       jest.spyOn(oauthService, 'getAuthenticatedClient').mockResolvedValue({} as any);
       jest.spyOn(google, 'gmail').mockReturnValue({
         users: { drafts: { create: createDraftSpy } },
-      });
+      } as any);
 
       const res = await draftService.createDraft('user-1', 'conn-work', {
         to: 'client@partner.com',
@@ -657,6 +682,9 @@ describe('Module 09 Enhancement: Multi-Account Gmail Management Suite', () => {
   afterEach(async () => {
     if (syncService) {
       await syncService.onModuleDestroy();
+    }
+    if (oauthService) {
+      await oauthService.onModuleDestroy();
     }
   });
 });

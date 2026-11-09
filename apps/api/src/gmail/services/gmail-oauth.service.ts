@@ -9,6 +9,7 @@ import { google } from 'googleapis';
 import * as crypto from 'crypto';
 import { PrismaService } from '@bhuvi/database';
 import { GmailConnectionDto, GmailConnectionStatus } from '@bhuvi/shared';
+import { Redis, getRedisConnectionOptions } from '@bhuvi/queue';
 import { TokenEncryptionService } from './token-encryption.service';
 
 export type OAuth2Client = InstanceType<typeof google.auth.OAuth2>;
@@ -23,11 +24,43 @@ export const DEFAULT_GMAIL_SCOPES = [
 @Injectable()
 export class GmailOAuthService {
   private readonly logger = new Logger(GmailOAuthService.name);
+  private redisClient: Redis | null = null;
+  private readonly consumedNonces = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokenEncryption: TokenEncryptionService,
   ) {}
+
+  private getRedisClient(): Redis | null {
+    if (this.redisClient) return this.redisClient;
+    try {
+      const opts = getRedisConnectionOptions();
+      const host = opts.host === 'localhost' ? '127.0.0.1' : opts.host;
+      this.redisClient = new Redis({
+        host,
+        port: opts.port,
+        password: opts.password,
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+        connectTimeout: 2000,
+        enableOfflineQueue: false,
+      });
+      return this.redisClient;
+    } catch {
+      return null;
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.redisClient) {
+      try {
+        await this.redisClient.quit();
+      } catch {
+        // Ignore disconnect error
+      }
+    }
+  }
 
   /**
    * Returns true if Google OAuth credentials are configured.
@@ -50,10 +83,8 @@ export class GmailOAuthService {
     return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
   }
 
-  private readonly consumedNonces = new Map<string, number>();
-
   /**
-   * Cleans up expired nonces.
+   * Cleans up expired nonces in memory.
    */
   private cleanExpiredNonces(): void {
     const now = Date.now();
@@ -79,9 +110,12 @@ export class GmailOAuthService {
 
   /**
    * Validates state parameter and extracts the authenticated userId.
-   * If consume=true, marks the nonce as used to prevent replay attacks.
+   * If consume=true, atomically marks the nonce as used in Redis to prevent replay attacks.
    */
-  validateState(state: string, consume = false): { valid: boolean; userId?: string } {
+  async validateState(
+    state: string,
+    consume = false,
+  ): Promise<{ valid: boolean; userId?: string }> {
     if (!state) return { valid: false };
 
     try {
@@ -98,14 +132,6 @@ export class GmailOAuthService {
         return { valid: false };
       }
 
-      this.cleanExpiredNonces();
-      if (this.consumedNonces.has(nonce)) {
-        this.logger.warn(
-          `OAuth state replay attempted for user [${userId}]. Nonce already consumed.`,
-        );
-        return { valid: false };
-      }
-
       const secret = process.env['JWT_SECRET'] || 'bhuvi_state_secret_key';
       const data = `${userId}:${timestampStr}:${nonce}`;
       const expectedHmac = crypto.createHmac('sha256', secret).update(data).digest('hex');
@@ -116,7 +142,52 @@ export class GmailOAuthService {
       }
 
       if (consume) {
+        // 1. Atomic one-time distributed state consumption in Redis
+        const redis = this.getRedisClient();
+        if (redis) {
+          try {
+            if (redis.status === 'wait') await redis.connect();
+            if (redis.status === 'ready' || redis.status === 'connect') {
+              const res = await redis.set(`oauth:nonce:${nonce}`, '1', 'EX', 900, 'NX');
+              if (res !== 'OK') {
+                this.logger.warn(
+                  `OAuth state replay attempted for user [${userId}]. Nonce already consumed in Redis.`,
+                );
+                return { valid: false };
+              }
+            }
+          } catch (err: unknown) {
+            this.logger.warn(
+              `Redis state check error, falling back to memory: ${(err as Error).message}`,
+            );
+          }
+        }
+
+        // 2. Secondary in-memory check for offline/test environments
+        this.cleanExpiredNonces();
+        if (this.consumedNonces.has(nonce)) {
+          this.logger.warn(
+            `OAuth state replay attempted for user [${userId}]. Nonce already consumed.`,
+          );
+          return { valid: false };
+        }
         this.consumedNonces.set(nonce, ts + 15 * 60 * 1000);
+      } else {
+        // Read-only validation: check if already consumed
+        const redis = this.getRedisClient();
+        if (redis && (redis.status === 'ready' || redis.status === 'connect')) {
+          try {
+            const exists = await redis.exists(`oauth:nonce:${nonce}`);
+            if (exists) {
+              return { valid: false };
+            }
+          } catch {
+            // Ignore redis check error
+          }
+        }
+        if (this.consumedNonces.has(nonce)) {
+          return { valid: false };
+        }
       }
 
       return { valid: true, userId };
@@ -159,8 +230,8 @@ export class GmailOAuthService {
   async handleCallback(
     code: string,
     state: string,
-  ): Promise<{ connectionId: string; email: string }> {
-    const { valid, userId } = this.validateState(state, true);
+  ): Promise<{ connectionId: string; email: string; userId: string }> {
+    const { valid, userId } = await this.validateState(state, true);
     if (!valid || !userId) {
       throw new BadRequestException('Invalid or expired OAuth state parameter.');
     }
@@ -233,7 +304,7 @@ export class GmailOAuthService {
     });
 
     this.logger.log(`User [${userId}] successfully connected Gmail account [${email}]`);
-    return { connectionId: connection.id, email };
+    return { connectionId: connection.id, email, userId };
   }
 
   /**

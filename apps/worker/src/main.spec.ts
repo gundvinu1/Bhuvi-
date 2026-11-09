@@ -1,3 +1,4 @@
+import { google } from 'googleapis';
 import { APP_NAME, APP_VERSION } from '@bhuvi/shared';
 import { PrismaClient } from '@bhuvi/database';
 import { BhuviWorker, loadConfig } from './main';
@@ -422,6 +423,170 @@ describe('BhuviWorker Foundation & Queue Integration', () => {
         data: expect.objectContaining({ syncStatus: 'SUCCESS' }),
       }),
     );
+  });
+
+  it('should actually fetch, parse, persist messages, and invoke Module 07 analysis for sync-gmail job', async () => {
+    const mockGmail = {
+      users: {
+        messages: {
+          list: jest.fn().mockResolvedValue({
+            data: { messages: [{ id: 'msg-w101' }] },
+          }),
+          get: jest.fn().mockResolvedValue({
+            data: {
+              id: 'msg-w101',
+              threadId: 'thread-w101',
+              snippet: 'Important team update regarding product release.',
+              labelIds: ['INBOX', 'UNREAD'],
+              payload: {
+                headers: [
+                  { name: 'Subject', value: 'Product Release Schedule' },
+                  { name: 'From', value: 'Engineering Lead <lead@tech.com>' },
+                  { name: 'To', value: 'team@tech.com' },
+                  { name: 'Date', value: new Date().toUTCString() },
+                ],
+                body: {
+                  data: Buffer.from('Please find the release notes attached.').toString(
+                    'base64url',
+                  ),
+                },
+              },
+            },
+          }),
+        },
+        history: {
+          list: jest.fn().mockResolvedValue({ data: { history: [] } }),
+        },
+      },
+    };
+
+    jest.spyOn(google, 'gmail').mockReturnValue(mockGmail as any);
+
+    const createdGmailMessages: any[] = [];
+    const createdMessages: any[] = [];
+    const createdAnalyses: any[] = [];
+
+    const mockPrisma = {
+      gmailConnection: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'conn-worker-1',
+          userId: 'user-1',
+          connectionStatus: 'CONNECTED',
+          encryptedAccessToken: 'mock-valid-token',
+          lastHistoryId: null,
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'conn-worker-1' }),
+      },
+      gmailSyncState: {
+        create: jest.fn().mockResolvedValue({ id: 'state-w1' }),
+        update: jest.fn().mockResolvedValue({ id: 'state-w1' }),
+      },
+      gmailMessage: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation((args) => {
+          const item = { id: 'gm-w101', ...args.data };
+          createdGmailMessages.push(item);
+          return item;
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'gm-w101' }),
+      },
+      message: {
+        create: jest.fn().mockImplementation((args) => {
+          const item = { id: 'msg-w101', ...args.data };
+          createdMessages.push(item);
+          return item;
+        }),
+      },
+      messageAnalysis: {
+        create: jest.fn().mockImplementation((args) => {
+          const item = { id: 'analysis-w101', ...args.data };
+          createdAnalyses.push(item);
+          return item;
+        }),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+    const mockJob = {
+      id: 'job-gmail-active',
+      name: JOB_SYNC_GMAIL,
+      data: { connectionId: 'conn-worker-1', userId: 'user-1' } as SyncGmailPayload,
+    } as unknown as Job;
+
+    const result = (await worker.processJob(mockJob)) as SyncGmailResult;
+    expect(result.status).toBe('COMPLETED');
+    expect(result.syncedCount).toBe(1);
+
+    // Verify GmailMessage persisted
+    expect(createdGmailMessages.length).toBe(1);
+    expect(createdGmailMessages[0].subject).toBe('Product Release Schedule');
+    expect(createdGmailMessages[0].senderEmail).toBe('lead@tech.com');
+    expect(createdGmailMessages[0].bodyText).toContain('Please find the release notes attached.');
+
+    // Verify Message entity created with source GMAIL
+    expect(createdMessages.length).toBe(1);
+    expect(createdMessages[0].source).toBe('GMAIL');
+    expect(createdMessages[0].userId).toBe('user-1');
+
+    // Verify Module 07 Analysis created
+    expect(createdAnalyses.length).toBe(1);
+    expect(createdAnalyses[0].messageId).toBe('msg-w101');
+    expect(createdAnalyses[0].summary).toBeDefined();
+
+    // Verify GmailMessage was linked to Message
+    expect(mockPrisma.gmailMessage.update).toHaveBeenCalledWith({
+      where: { id: 'gm-w101' },
+      data: { messageId: 'msg-w101' },
+    });
+  });
+
+  it('should isolate account failures: failure in account 1 does not affect sync of account 2', async () => {
+    const mockPrisma = {
+      gmailConnection: {
+        findUnique: jest.fn().mockImplementation(({ where }) => {
+          if (where.id === 'conn-failing') {
+            return Promise.resolve({
+              id: 'conn-failing',
+              userId: 'user-1',
+              connectionStatus: 'CONNECTED',
+              encryptedAccessToken: 'invalid-token',
+            });
+          }
+          return Promise.resolve({
+            id: 'conn-success',
+            userId: 'user-1',
+            connectionStatus: 'CONNECTED',
+            encryptedAccessToken: 'valid-token',
+          });
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'conn-success' }),
+      },
+      gmailSyncState: {
+        create: jest.fn().mockResolvedValue({ id: 'state-x' }),
+        update: jest.fn().mockResolvedValue({ id: 'state-x' }),
+      },
+      gmailMessage: {
+        findUnique: jest.fn().mockResolvedValue(null),
+      },
+    };
+
+    const worker = new BhuviWorker(
+      { nodeEnv: 'test', port: 3002 },
+      mockPrisma as unknown as PrismaClient,
+    );
+
+    // Job for account 2 succeeds
+    const jobSuccess = {
+      id: 'job-acc-2',
+      name: JOB_SYNC_GMAIL,
+      data: { connectionId: 'conn-success', userId: 'user-1' } as SyncGmailPayload,
+    } as unknown as Job;
+
+    const resSuccess = (await worker.processJob(jobSuccess)) as SyncGmailResult;
+    expect(resSuccess.status).toBe('COMPLETED');
   });
 
   it('should skip sync-gmail job if connection is DISCONNECTED', async () => {

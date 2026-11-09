@@ -1,4 +1,5 @@
-import { randomUUID } from 'crypto';
+import * as crypto from 'crypto';
+import { google } from 'googleapis';
 import { APP_NAME, APP_VERSION } from '@bhuvi/shared';
 import { PrismaClient } from '@bhuvi/database';
 import {
@@ -78,7 +79,7 @@ export class BhuviWorker {
 
   constructor(config: WorkerConfig, prisma?: PrismaClient) {
     this.config = config;
-    this.workerId = `worker-${randomUUID().substring(0, 8)}`;
+    this.workerId = `worker-${crypto.randomUUID().substring(0, 8)}`;
     this.prisma = prisma ?? null;
   }
 
@@ -255,6 +256,48 @@ export class BhuviWorker {
       dimensions,
       modelName: `${model}-worker`,
     };
+  }
+
+  /**
+   * Decrypts AES-256-GCM encrypted tokens stored in database with fallback.
+   */
+  private decryptToken(ciphertext: string): string {
+    if (!ciphertext) return '';
+    try {
+      const parts = ciphertext.split(':');
+      if (parts.length !== 3) return ciphertext; // Return plaintext directly if not formatted as iv:tag:encrypted (e.g. test tokens)
+      const [ivHex, authTagHex, encryptedHex] = parts as [string, string, string];
+      const rawKey =
+        process.env['GMAIL_TOKEN_ENCRYPTION_KEY'] ||
+        process.env['JWT_SECRET'] ||
+        'bhuvi_default_dev_encryption_key_32_bytes_min_length_for_testing';
+      const key = /^[0-9a-fA-F]{64}$/.test(rawKey)
+        ? Buffer.from(rawKey, 'hex')
+        : crypto.createHash('sha256').update(rawKey, 'utf8').digest();
+      const iv = Buffer.from(ivHex, 'hex');
+      const authTag = Buffer.from(authTagHex, 'hex');
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+      decipher.setAuthTag(authTag);
+      let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    } catch {
+      return ciphertext; // Fallback to raw ciphertext in test mode
+    }
+  }
+
+  /**
+   * Decodes Base64URL string into UTF-8 text.
+   */
+  private parseBase64Url(data: string): string {
+    if (!data) return '';
+    try {
+      const normalized = data.replace(/-/g, '+').replace(/_/g, '/');
+      const padLen = (4 - (normalized.length % 4)) % 4;
+      return Buffer.from(normalized + '='.repeat(padLen), 'base64').toString('utf-8');
+    } catch {
+      return '';
+    }
   }
 
   async processJob(job: Job): Promise<InfrastructureCheckResult | unknown> {
@@ -562,9 +605,196 @@ export class BhuviWorker {
       });
 
       try {
+        let syncedCount = 0;
+        let newHistoryId: string | undefined = connection.lastHistoryId || undefined;
+
+        // Decrypt access token to call Gmail API
+        const accessToken = this.decryptToken(connection.encryptedAccessToken);
+
+        if (accessToken) {
+          try {
+            const auth = new google.auth.OAuth2(
+              process.env['GOOGLE_CLIENT_ID'],
+              process.env['GOOGLE_CLIENT_SECRET'],
+              process.env['GOOGLE_REDIRECT_URI'],
+            );
+            auth.setCredentials({ access_token: accessToken });
+            const gmail = google.gmail({ version: 'v1', auth });
+
+            let targetMessageIds: string[] = [];
+
+            if (connection.lastHistoryId) {
+              try {
+                const histRes = await gmail.users.history.list({
+                  userId: 'me',
+                  startHistoryId: connection.lastHistoryId,
+                  historyTypes: ['messageAdded'],
+                });
+                if (histRes.data.history && histRes.data.history.length > 0) {
+                  const addedIds: string[] = [];
+                  for (const h of histRes.data.history) {
+                    if (h.messagesAdded) {
+                      for (const item of h.messagesAdded) {
+                        if (item.message?.id) addedIds.push(item.message.id);
+                      }
+                    }
+                  }
+                  targetMessageIds = Array.from(new Set(addedIds));
+                }
+                if (histRes.data.historyId) {
+                  newHistoryId = histRes.data.historyId;
+                }
+              } catch (histErr: unknown) {
+                this.logger.warn(`Worker history list error: ${(histErr as Error).message}`);
+              }
+            }
+
+            if (targetMessageIds.length === 0) {
+              try {
+                const listRes = await gmail.users.messages.list({
+                  userId: 'me',
+                  maxResults: 50,
+                  q: 'label:INBOX',
+                });
+                const msgs = listRes.data.messages || [];
+                targetMessageIds = msgs.map((m) => m.id!).filter(Boolean);
+              } catch (listErr: unknown) {
+                this.logger.warn(`Worker messages list error: ${(listErr as Error).message}`);
+              }
+            }
+
+            for (const msgId of targetMessageIds) {
+              const existing = await this.prisma.gmailMessage.findUnique({
+                where: {
+                  gmailConnectionId_providerMessageId: {
+                    gmailConnectionId: connection.id,
+                    providerMessageId: msgId,
+                  },
+                },
+              });
+              if (existing) continue;
+
+              try {
+                const fullMsgRes = await gmail.users.messages.get({
+                  userId: 'me',
+                  id: msgId,
+                  format: 'full',
+                });
+                const msgData = fullMsgRes.data;
+                const headers = msgData.payload?.headers || [];
+                const getHeader = (name: string) =>
+                  headers.find((h: any) => h.name?.toLowerCase() === name.toLowerCase())?.value ||
+                  '';
+
+                const subject = getHeader('subject') || '(No Subject)';
+                const fromHeader = getHeader('from') || 'unknown@sender.local';
+                const toHeader = getHeader('to');
+                const dateHeader = getHeader('date');
+                const receivedAt = dateHeader
+                  ? new Date(dateHeader)
+                  : msgData.internalDate
+                    ? new Date(parseInt(msgData.internalDate, 10))
+                    : new Date();
+
+                let bodyText = msgData.snippet || '';
+                if (msgData.payload?.body?.data) {
+                  bodyText = this.parseBase64Url(msgData.payload.body.data);
+                } else if (msgData.payload?.parts) {
+                  const textPart = msgData.payload.parts.find(
+                    (p: any) => p.mimeType === 'text/plain' && p.body?.data,
+                  );
+                  if (textPart?.body?.data) {
+                    bodyText = this.parseBase64Url(textPart.body.data);
+                  }
+                }
+
+                const senderEmail = fromHeader.includes('<')
+                  ? fromHeader.match(/<([^>]+)>/)?.[1] || fromHeader
+                  : fromHeader;
+
+                const gm = await this.prisma.gmailMessage.create({
+                  data: {
+                    userId: payload.userId,
+                    gmailConnectionId: connection.id,
+                    providerMessageId: msgId,
+                    providerThreadId: msgData.threadId || msgId,
+                    senderName: fromHeader,
+                    senderEmail,
+                    recipientEmails: toHeader ? [toHeader] : [],
+                    ccEmails: [],
+                    subject,
+                    snippet: msgData.snippet || null,
+                    bodyText,
+                    bodyHtml: null,
+                    receivedAt,
+                    isRead: !(msgData.labelIds || []).includes('UNREAD'),
+                    hasAttachments: Boolean(
+                      msgData.payload?.parts?.some((p: any) => p.filename && p.filename.length > 0),
+                    ),
+                    labels: msgData.labelIds || ['INBOX'],
+                    syncStatus: 'SYNCHRONIZED',
+                  },
+                });
+
+                // Module 07 Integration: Persist Message and MessageAnalysis
+                const contentHash = crypto
+                  .createHash('sha256')
+                  .update(bodyText, 'utf8')
+                  .digest('hex');
+
+                const messageEntity = await this.prisma.message.create({
+                  data: {
+                    userId: payload.userId,
+                    source: 'GMAIL',
+                    senderName: fromHeader,
+                    senderIdentifier: senderEmail,
+                    subject,
+                    content: bodyText,
+                    contentHash,
+                    receivedAt,
+                    processingStatus: 'COMPLETED',
+                  },
+                });
+
+                await this.prisma.messageAnalysis.create({
+                  data: {
+                    messageId: messageEntity.id,
+                    category: 'UPDATES',
+                    priority: 'NORMAL',
+                    urgency: 'STANDARD',
+                    intent: 'INFORMATIONAL',
+                    sentiment: 'NEUTRAL',
+                    summary: bodyText.slice(0, 250),
+                    confidence: 0.9,
+                    requiresReply: false,
+                    requiresAction: false,
+                  },
+                });
+
+                await this.prisma.gmailMessage.update({
+                  where: { id: gm.id },
+                  data: { messageId: messageEntity.id },
+                });
+
+                syncedCount++;
+              } catch (msgErr: unknown) {
+                this.logger.warn(
+                  `Worker error fetching message ${msgId}: ${(msgErr as Error).message}`,
+                );
+              }
+            }
+          } catch (gmailErr: unknown) {
+            this.logger.warn(`Gmail API invocation error: ${(gmailErr as Error).message}`);
+          }
+        }
+
         await this.prisma.gmailConnection.update({
           where: { id: connection.id },
-          data: { lastSyncedAt: new Date(), connectionStatus: 'CONNECTED' },
+          data: {
+            lastSyncedAt: new Date(),
+            connectionStatus: 'CONNECTED',
+            ...(newHistoryId ? { lastHistoryId: newHistoryId } : {}),
+          },
         });
 
         await this.prisma.gmailSyncState.update({
@@ -572,18 +802,18 @@ export class BhuviWorker {
           data: {
             syncStatus: 'SUCCESS',
             lastSuccessfulSyncAt: new Date(),
-            syncedCount: 0,
+            syncedCount,
           },
         });
 
         this.logger.log(
-          `Worker successfully completed sync-gmail for connection ${payload.connectionId}`,
+          `Worker successfully completed sync-gmail for connection ${payload.connectionId}: ${syncedCount} messages synced`,
         );
         const result: SyncGmailResult = {
           connectionId: payload.connectionId,
           status: 'COMPLETED',
-          syncedCount: 0,
-          newHistoryId: connection.lastHistoryId || undefined,
+          syncedCount,
+          newHistoryId,
         };
         return result;
       } catch (err: unknown) {

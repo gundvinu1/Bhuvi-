@@ -129,9 +129,8 @@ export class GmailController {
       const result = await this.oauthService.handleCallback(code, state);
 
       // Trigger asynchronous initial sync in background
-      const { userId } = this.oauthService.validateState(state);
-      if (userId) {
-        this.syncService.tryEnqueueSync(result.connectionId, userId).catch(() => {});
+      if (result.userId) {
+        this.syncService.tryEnqueueSync(result.connectionId, result.userId).catch(() => {});
       }
 
       // Redirect user back to frontend dashboard
